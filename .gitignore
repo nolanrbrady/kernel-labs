@@ -1,0 +1,46 @@
+# Dependencies and package-manager state
+node_modules/
+.pnpm-store/
+.pnpm-home/
+.npm-cache/
+.corepack/
+.corepack-user/
+
+# Build and coverage outputs
+dist/
+coverage/
+*.tsbuildinfo
+
+# Test and automation outputs
+test-results/
+playwright-report/
+blob-report/
+
+# Local caches and temp artifacts
+.cache/
+.cache-local/
+.turbo/
+.ralph_wiggims.lock
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+yarn-debug.log*
+yarn-error.log*
+npm-debug.log*
+pnpm-debug.log*
+
+# Python runtime artifacts
+__pycache__
+.pytest_cache
+.venv
+*.pyc
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/
