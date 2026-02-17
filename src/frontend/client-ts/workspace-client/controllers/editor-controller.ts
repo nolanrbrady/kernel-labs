@@ -45,6 +45,10 @@ type AceEditorLike = {
 type AceGlobalLike = {
   edit: (element: unknown) => AceEditorLike
 }
+type EditorMode = "ace" | "textarea"
+
+const ACE_LIGHT_THEME = "ace/theme/github"
+const ACE_DARK_THEME = "ace/theme/tomorrow_night"
 
 type MouseDownEventLike = {
   target?: unknown
@@ -88,48 +92,14 @@ export class EditorController {
       this.codeEditorShell.setAttribute("data-editor-enhanced", "true")
     }
 
+    this.setEditorMode("textarea")
     if (this.initializeAceEditor()) {
-      if (
-        this.codeEditorShell &&
-        typeof this.codeEditorShell.addEventListener === "function"
-      ) {
-        this.codeEditorShell.addEventListener(
-          "mousedown",
-          this.focusAceFromShellClick.bind(this) as EventHandlerLike
-        )
-      }
+      this.bindShellMouseDown(this.focusAceFromShellClick.bind(this))
       return
     }
 
-    if (
-      this.codeEditorShell &&
-      typeof this.codeEditorShell.setAttribute === "function"
-    ) {
-      this.codeEditorShell.setAttribute("data-editor-mode", "textarea")
-    }
-
-    this.codeEditor.addEventListener(
-      "keydown",
-      this.handleEditorTabIndent.bind(this) as EventHandlerLike
-    )
-    this.codeEditor.addEventListener(
-      "keydown",
-      this.handleSessionStartFromTyping.bind(this) as EventHandlerLike
-    )
-    this.codeEditor.addEventListener("focus", this.handleEditorFocus.bind(this))
-    this.codeEditor.addEventListener("blur", this.handleEditorBlur.bind(this))
-    this.codeEditor.addEventListener("input", this.renderCodeHighlight.bind(this))
-    this.codeEditor.addEventListener("scroll", this.syncHighlightScroll.bind(this))
-
-    if (
-      this.codeEditorShell &&
-      typeof this.codeEditorShell.addEventListener === "function"
-    ) {
-      this.codeEditorShell.addEventListener(
-        "mousedown",
-        this.focusEditorFromShellClick.bind(this) as EventHandlerLike
-      )
-    }
+    this.bindTextareaFallbackHandlers()
+    this.bindShellMouseDown(this.focusEditorFromShellClick.bind(this))
 
     this.renderCodeHighlight()
   }
@@ -141,7 +111,7 @@ export class EditorController {
 
     const activeTheme = this.getActiveTheme()
     const aceTheme =
-      activeTheme === "light" ? "ace/theme/github" : "ace/theme/tomorrow_night"
+      activeTheme === "light" ? ACE_LIGHT_THEME : ACE_DARK_THEME
 
     this.aceEditor.setTheme(aceTheme)
     if (typeof this.aceEditor.resize === "function") {
@@ -345,12 +315,7 @@ export class EditorController {
 
     this.aceEditor = aceEditor
 
-    if (
-      this.codeEditorShell &&
-      typeof this.codeEditorShell.setAttribute === "function"
-    ) {
-      this.codeEditorShell.setAttribute("data-editor-mode", "ace")
-    }
+    this.setEditorMode("ace")
     if (this.codeAceHost.style) {
       this.codeAceHost.style.display = "block"
     }
@@ -452,5 +417,49 @@ export class EditorController {
     }
 
     return false
+  }
+
+  private bindTextareaFallbackHandlers(): void {
+    if (!this.codeEditor) {
+      return
+    }
+
+    this.codeEditor.addEventListener(
+      "keydown",
+      this.handleEditorTabIndent.bind(this) as EventHandlerLike
+    )
+    this.codeEditor.addEventListener(
+      "keydown",
+      this.handleSessionStartFromTyping.bind(this) as EventHandlerLike
+    )
+    this.codeEditor.addEventListener("focus", this.handleEditorFocus.bind(this))
+    this.codeEditor.addEventListener("blur", this.handleEditorBlur.bind(this))
+    this.codeEditor.addEventListener("input", this.renderCodeHighlight.bind(this))
+    this.codeEditor.addEventListener("scroll", this.syncHighlightScroll.bind(this))
+  }
+
+  private bindShellMouseDown(handler: (event?: MouseDownEventLike) => void): void {
+    if (
+      !this.codeEditorShell ||
+      typeof this.codeEditorShell.addEventListener !== "function"
+    ) {
+      return
+    }
+
+    this.codeEditorShell.addEventListener(
+      "mousedown",
+      handler as EventHandlerLike
+    )
+  }
+
+  private setEditorMode(mode: EditorMode): void {
+    if (
+      !this.codeEditorShell ||
+      typeof this.codeEditorShell.setAttribute !== "function"
+    ) {
+      return
+    }
+
+    this.codeEditorShell.setAttribute("data-editor-mode", mode)
   }
 }

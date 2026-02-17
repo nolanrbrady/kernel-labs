@@ -882,6 +882,10 @@ test("editor controller handles tab indentation, highlight rendering, and typing
     codeEditorShell.getAttribute("data-editor-enhanced"),
     "true"
   )
+  assert.equal(
+    codeEditorShell.getAttribute("data-editor-mode"),
+    "textarea"
+  )
   assert.equal(codeHighlight.innerHTML.includes("token-keyword"), true)
 
   const secondLineStart = codeEditor.value.indexOf("\n") + 1

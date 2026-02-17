@@ -11,6 +11,18 @@ This runbook defines how to operate the MVP locally and the minimal path to serv
   - Anonymous/local progress: file-backed local store (`.cache-local/anonymous-progress.json`)
   - Account/server progress: API surface prepared for account merge flows
 
+## Editor Architecture
+- Primary editor: Ace (`ace-builds`) mounted in `#starter-code-ace`.
+- Fallback editor: existing textarea + lightweight syntax-highlight overlay (`#starter-code-editor` + `#starter-code-highlight`).
+- Runtime contract: run/submit flows always read from `#starter-code-editor`; Ace keeps textarea value synchronized on every change.
+- Mode signaling: `.code-editor-shell` sets `data-editor-mode="ace"` or `data-editor-mode="textarea"` for deterministic styling and test hooks.
+- Theme sync:
+  - app `data-theme="light"` -> Ace `ace/theme/github`
+  - app `data-theme="dark"` -> Ace `ace/theme/tomorrow_night`
+- Static asset pipeline:
+  - build step copies Ace files into `dist/static/workspace-client/vendor/ace`.
+  - HTML shell loads Ace scripts before `workspace-client/index.js`.
+
 ## Prerequisites
 - Node.js 20+
 - npm 10+
