@@ -6,6 +6,23 @@ import { fileURLToPath } from "node:url"
 import { createContext, runInContext } from "node:vm"
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
+const domainScriptSource = readFileSync(
+  join(currentDir, "..", "src", "frontend", "problem-workspace-client-domain.js"),
+  "utf-8"
+)
+const controllerScriptSources = [
+  "problem-workspace-client-controllers.js",
+  "problem-workspace-client-controller-shared.js",
+  "problem-workspace-client-editor-controller.js",
+  "problem-workspace-client-workspace-controllers.js",
+  "problem-workspace-client-session-controllers.js",
+  "problem-workspace-client-topic-controller.js"
+].map((fileName) => {
+  return readFileSync(
+    join(currentDir, "..", "src", "frontend", fileName),
+    "utf-8"
+  )
+})
 const clientScriptSource = readFileSync(
   join(currentDir, "..", "src", "frontend", "problem-workspace-client.js"),
   "utf-8"
@@ -99,6 +116,14 @@ function createMockResponse(payload: unknown, status = 200): Response {
       return payload
     }
   } as Response
+}
+
+function runWorkspaceClientScripts(context: ReturnType<typeof createContext>) {
+  runInContext(domainScriptSource, context)
+  for (const source of controllerScriptSources) {
+    runInContext(source, context)
+  }
+  runInContext(clientScriptSource, context)
 }
 
 test("workspace client script wires run then submit and stores anonymous progress", async () => {
@@ -238,7 +263,7 @@ test("workspace client script wires run then submit and stores anonymous progres
     }
   })
 
-  runInContext(clientScriptSource, context)
+  runWorkspaceClientScripts(context)
 
   const runClickHandler = runButton.handlers.get("click")
   const submitClickHandler = submitButton.handlers.get("click")
@@ -442,7 +467,7 @@ test("workspace client script appends repeated run logs for iterative debugging"
     }
   })
 
-  runInContext(clientScriptSource, context)
+  runWorkspaceClientScripts(context)
 
   await runButton.handlers.get("click")?.()
   await runButton.handlers.get("click")?.()
@@ -543,7 +568,7 @@ test("workspace client script shows runtime stdout when run fails", async () => 
     }
   })
 
-  runInContext(clientScriptSource, context)
+  runWorkspaceClientScripts(context)
 
   await runButton.handlers.get("click")?.()
 
@@ -679,7 +704,7 @@ test("workspace client script auto-submits at 30-minute cap after timer start", 
     }
   })
 
-  runInContext(clientScriptSource, context)
+  runWorkspaceClientScripts(context)
 
   await startProblemButton.handlers.get("click")?.()
 
@@ -805,7 +830,7 @@ test("workspace client script starts timer on first typed character in editor", 
     }
   })
 
-  runInContext(clientScriptSource, context)
+  runWorkspaceClientScripts(context)
 
   await codeEditor.handlers.get("keydown")?.({
     key: "a"
@@ -926,7 +951,7 @@ test("workspace client script keeps done-state messaging when anonymous sync fai
     }
   })
 
-  runInContext(clientScriptSource, context)
+  runWorkspaceClientScripts(context)
 
   await runButton.handlers.get("click")?.()
   await submitButton.handlers.get("click")?.()
@@ -1000,7 +1025,7 @@ test("workspace client script inserts indentation when tab is pressed in editor"
     }
   })
 
-  runInContext(clientScriptSource, context)
+  runWorkspaceClientScripts(context)
 
   const secondLineStart = codeEditor.value.indexOf("\n") + 1
   codeEditor.selectionStart = secondLineStart
@@ -1084,7 +1109,7 @@ test("workspace client script renders and refreshes syntax highlighting with edi
     }
   })
 
-  runInContext(clientScriptSource, context)
+  runWorkspaceClientScripts(context)
 
   assert.equal(codeHighlight.innerHTML.includes("token-keyword"), true)
   assert.equal(codeHighlight.innerHTML.includes("def"), true)
@@ -1179,7 +1204,7 @@ test("workspace client script toggles problem and question-bank tabs", async () 
     }
   })
 
-  runInContext(clientScriptSource, context)
+  runWorkspaceClientScripts(context)
 
   assert.equal(workspaceProblemTabPanel.hidden, false)
   assert.equal(workspaceLibraryTabPanel.hidden, true)
@@ -1307,7 +1332,7 @@ test("workspace client script reveals hints in order with supportive messaging",
     }
   })
 
-  runInContext(clientScriptSource, context)
+  runWorkspaceClientScripts(context)
 
   await hintTier2Button.handlers.get("click")?.()
   assert.equal(
@@ -1498,7 +1523,7 @@ test("workspace question library supports fuzzy search, type filtering, and sugg
     }
   })
 
-  runInContext(clientScriptSource, context)
+  runWorkspaceClientScripts(context)
 
   assert.equal(questionLibraryCount.textContent, "Showing 3 of 3 questions.")
   assert.equal(
@@ -1715,7 +1740,7 @@ test("workspace client script marks visible test-case tabs as pass after success
     }
   })
 
-  runInContext(clientScriptSource, context)
+  runWorkspaceClientScripts(context)
 
   await runButton.handlers.get("click")?.()
 

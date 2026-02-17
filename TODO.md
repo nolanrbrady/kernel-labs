@@ -235,6 +235,37 @@ Task line template:
   PRD refs: 7, 14
 - [x] P1-03 | Server Hardening | Add production deployment hardening only after MVP loop is validated locally. | blocked_by=none | verify=make test;make lint
   PRD refs: 15, 18
+- [ ] P1-04 | Interchangeable Card Selection Threshold | Let users choose among near-equal scheduler candidates when spaced-repetition weights fall within a configurable threshold. | blocked_by=none | verify=make test;make lint
+  PRD refs: 5, 9, 18
+  Acceptance:
+  - Scheduler returns a deterministic interchangeable-candidate set when card weights are within threshold of the top card.
+  - Session planner keeps one-problem-per-session while allowing explicit user choice among interchangeable candidates.
+  - If user does not choose, planner falls back deterministically to the top-ranked card.
+  Required tests:
+  - Scheduler unit tests for threshold grouping boundaries and deterministic ordering.
+  - Session-planner integration tests for user-choice and fallback selection paths.
+
+- [ ] P1-05 | Robust Card Verification Pipeline | Build a strict verification workflow that validates question quality and reference-solution correctness before cards are eligible for scheduling. | blocked_by=none | verify=make test;make lint
+  PRD refs: 6, 8, 13, 18
+  Acceptance:
+  - Problem authoring/ingest runs schema lint, fixture validity checks, and reference-solution runtime regression checks.
+  - Verification status is tracked per card (`verified`, `needs_review`, `rejected`) with actionable diagnostics.
+  - Scheduler excludes non-verified cards by default.
+  Required tests:
+  - Unit tests for verification-rule evaluation and status transitions.
+  - Regression tests that fail cards with mismatched prompt/solution expectations.
+  - Scheduler/planner tests confirming non-verified cards are not selected.
+
+- [ ] P1-06 | User Flag-For-Review Mechanism | Add a flag action so users can mark a question for review when content appears incorrect or unclear. | blocked_by=none | verify=make test;make lint
+  PRD refs: 5, 6, 18
+  Acceptance:
+  - Workspace exposes a `Flag` control for the active question.
+  - Flag submission captures reason, card ID, user/session context, and timestamp in a review queue.
+  - Flagged cards are visibly marked and routed into verification triage workflows.
+  Required tests:
+  - Client-script integration test for flag interaction and supportive confirmation state.
+  - API integration tests for review-queue write/read behavior and duplicate-flag handling.
+  - Verification/scheduler tests confirming triage behavior for flagged cards.
 
 ## P2 - Post-P1 Product Iteration
 
