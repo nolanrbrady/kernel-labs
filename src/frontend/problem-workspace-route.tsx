@@ -286,7 +286,7 @@ export function ProblemWorkspaceScreen(props: {
       )}
     >
       <header className="workspace-topbar">
-        <p className="workspace-brand">DeepML-SR Daily Session</p>
+        <p className="workspace-brand">Kernel Labs</p>
         <div className="topbar-actions">
           <a className="account-cta" href={route.accountCallToActionPath}>
             {route.accountCallToAction}
