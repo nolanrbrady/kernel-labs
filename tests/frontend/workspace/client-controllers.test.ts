@@ -13,7 +13,8 @@ import {
   QuestionLibraryController,
   SessionController,
   SubmissionController,
-  SuggestTopicController
+  SuggestTopicController,
+  ProblemFlagController
 } from "../../../src/frontend/client-ts/workspace-client/controllers/index.js"
 
 type EventHandler = (event?: {
@@ -135,7 +136,8 @@ function loadControllerClasses() {
       QuestionLibraryController,
       SessionController,
       SubmissionController,
-      SuggestTopicController
+      SuggestTopicController,
+      ProblemFlagController
     } as unknown as {
       createWorkspaceApiAdapters: (options: {
         fetchImpl?: (
@@ -148,6 +150,7 @@ function loadControllerClasses() {
         submitSession: (payload: Record<string, unknown>) => Promise<ApiAdapterResult>
         syncAnonymousProgress: (payload: Record<string, unknown>) => Promise<ApiAdapterResult>
         requestSchedulerDecision: (payload: Record<string, unknown>) => Promise<ApiAdapterResult>
+        flagProblem: (payload: Record<string, unknown>) => Promise<ApiAdapterResult>
       }
       EditorController: new (options: {
         codeEditor: FakeElement
@@ -260,6 +263,23 @@ function loadControllerClasses() {
       SuggestTopicController: new (options: Record<string, unknown>) => {
         bind: () => void
       }
+      ProblemFlagController: new (options: {
+        problemId: string
+        problemVersion: number
+        flagProblemButton: FakeElement
+        flagProblemReasonInput: FakeElement
+        flagProblemNotesInput: FakeElement
+        flagProblemStatus: FakeElement
+        api: {
+          flagProblem: (payload: Record<string, unknown>) => Promise<ApiAdapterResult>
+        }
+        getSessionId: () => string
+        getLastEvaluation: () => { correctness: string; explanation: string } | null
+        appendDebugLine: (text: string) => void
+      }) => {
+        bind: () => void
+        submitFlag: () => Promise<void>
+      }
     }
   }
 }
@@ -285,13 +305,21 @@ test("workspace API adapters post JSON payloads and return parsed envelopes", as
     sessionId: "session-1",
     problemId: "problem_a"
   })
+  const flagResult = await adapters.flagProblem({
+    problemId: "problem_a",
+    problemVersion: 1,
+    reason: "incorrect_output",
+    sessionId: "session-1"
+  })
 
   assert.equal(runResult.ok, true)
   assert.equal(runResult.status, 200)
   assert.deepEqual(runResult.payload, { status: "ok", endpoint: "/api/runtime/run" })
   assert.equal(submitResult.ok, true)
+  assert.equal(flagResult.ok, true)
   assert.equal(calls[0]?.input, "/api/runtime/run")
   assert.equal(calls[1]?.input, "/api/session/submit")
+  assert.equal(calls[2]?.input, "/api/problems/flag")
   assert.equal(
     String(calls[0]?.init?.headers ? (calls[0]?.init?.headers as Record<string, string>)["content-type"] : ""),
     "application/json"
@@ -299,6 +327,15 @@ test("workspace API adapters post JSON payloads and return parsed envelopes", as
   assert.deepEqual(
     JSON.parse(String(calls[0]?.init?.body ?? "{}")),
     { problemId: "problem_a", userCode: "def solve(x): return x" }
+  )
+  assert.deepEqual(
+    JSON.parse(String(calls[2]?.init?.body ?? "{}")),
+    {
+      problemId: "problem_a",
+      problemVersion: 1,
+      reason: "incorrect_output",
+      sessionId: "session-1"
+    }
   )
 })
 
@@ -488,6 +525,77 @@ test("submission controller submits session and keeps done state when sync fails
   assert.equal(debugLines.includes("$ submit (attention_scaled_dot_product_v1)"), true)
   assert.equal(debugLines.includes("> submit accepted: done - Session complete."), true)
   assert.equal(submitButton.disabled, false)
+})
+
+test("problem flag controller submits structured flags and updates status text", async () => {
+  const { controllers } = loadControllerClasses()
+  const flagProblemButton = createFakeElement()
+  const flagProblemReasonInput = createFakeElement("", "incorrect_output")
+  const flagProblemNotesInput = createFakeElement("", "Expected output mismatches hidden test.")
+  const flagProblemStatus = createFakeElement("Spot an issue? Flag it and this card will be reviewed.")
+  const debugLines: string[] = []
+  let capturedPayload: Record<string, unknown> = {}
+
+  const controller = new controllers.ProblemFlagController({
+    problemId: "attention_scaled_dot_product_v1",
+    problemVersion: 1,
+    flagProblemButton,
+    flagProblemReasonInput,
+    flagProblemNotesInput,
+    flagProblemStatus,
+    api: {
+      async flagProblem(payload: Record<string, unknown>) {
+        capturedPayload = payload
+        return {
+          ok: true,
+          status: 200,
+          payload: {
+            status: "accepted",
+            deduplicated: false,
+            verificationStatus: "needs_review",
+            triageAction: "status_updated_to_needs_review",
+            reviewQueueSize: 1,
+            message: "Flag recorded and card moved to needs_review."
+          }
+        }
+      }
+    },
+    getSessionId() {
+      return "session-1733000000000"
+    },
+    getLastEvaluation() {
+      return {
+        correctness: "partial",
+        explanation: "Shape is correct; value drift remains."
+      }
+    },
+    appendDebugLine(text: string) {
+      debugLines.push(text)
+    }
+  })
+
+  controller.bind()
+  await flagProblemButton.handlers.get("click")?.()
+
+  assert.equal(capturedPayload.problemId, "attention_scaled_dot_product_v1")
+  assert.equal(capturedPayload.problemVersion, 1)
+  assert.equal(capturedPayload.reason, "incorrect_output")
+  assert.equal(capturedPayload.sessionId, "session-1733000000000")
+  assert.equal(capturedPayload.evaluationCorrectness, "partial")
+  assert.equal(
+    capturedPayload.evaluationExplanation,
+    "Shape is correct; value drift remains."
+  )
+  assert.equal(
+    flagProblemStatus.textContent,
+    "Flag submitted. Verification status: needs_review."
+  )
+  assert.equal(debugLines.includes("$ flag (attention_scaled_dot_product_v1)"), true)
+  assert.equal(
+    debugLines.includes("> flag accepted: status_updated_to_needs_review (needs_review)"),
+    true
+  )
+  assert.equal(flagProblemButton.disabled, false)
 })
 
 test("editor controller handles tab indentation, highlight rendering, and typing callback", async () => {

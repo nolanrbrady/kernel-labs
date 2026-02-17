@@ -13,7 +13,8 @@ import {
   QuestionLibraryController,
   SessionController,
   SubmissionController,
-  SuggestTopicController
+  SuggestTopicController,
+  ProblemFlagController
 } from "./controllers/index.js"
 import type {
   FetchLike,
@@ -56,6 +57,10 @@ export function initializeProblemWorkspaceClient(): void {
   const evaluationStatus = getElementById<HTMLElement>("evaluation-status")
   const sessionStatus = getElementById<HTMLElement>("session-status")
   const scheduleStatus = getElementById<HTMLElement>("schedule-status")
+  const flagProblemButton = getElementById<HTMLButtonElement>("flag-problem-button")
+  const flagProblemReasonInput = getElementById<HTMLSelectElement>("flag-problem-reason")
+  const flagProblemNotesInput = getElementById<HTMLTextAreaElement>("flag-problem-notes")
+  const flagProblemStatus = getElementById<HTMLElement>("flag-problem-status")
   const sessionTimerStatus = getElementById<HTMLElement>("session-timer-status")
   const timerCapMessage = getElementById<HTMLElement>("timer-cap-message")
   const startProblemButton = getElementById<HTMLButtonElement>("start-problem-button")
@@ -140,6 +145,12 @@ export function initializeProblemWorkspaceClient(): void {
     "data-visible-test-case-ids"
   )
   const problemId = workspaceRootNode.getAttribute("data-problem-id")
+  const rawProblemVersion = workspaceRootNode.getAttribute("data-problem-version")
+  const problemVersion =
+    typeof rawProblemVersion === "string" &&
+    Number.isFinite(Number(rawProblemVersion))
+      ? Math.max(1, Math.round(Number(rawProblemVersion)))
+      : 1
 
   // ─── Storage Keys ───
 
@@ -359,6 +370,22 @@ export function initializeProblemWorkspaceClient(): void {
       return sessionController.getLastEvaluation()
     },
     stopSessionTimer
+  })
+  const problemFlagController = new ProblemFlagController({
+    problemId,
+    problemVersion,
+    flagProblemButton,
+    flagProblemReasonInput,
+    flagProblemNotesInput,
+    flagProblemStatus,
+    api: apiAdapters,
+    getSessionId: () => {
+      return sessionController.getSessionId()
+    },
+    getLastEvaluation: () => {
+      return sessionController.getLastEvaluation()
+    },
+    appendDebugLine
   })
 
   // ─── Session Timer ───
@@ -637,6 +664,7 @@ export function initializeProblemWorkspaceClient(): void {
   visibleTestCaseController.bind()
   sessionController.bind()
   submissionController.bind()
+  problemFlagController.bind()
 }
 
 if (typeof document !== "undefined") {

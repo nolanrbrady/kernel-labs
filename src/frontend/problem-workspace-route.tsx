@@ -13,6 +13,7 @@ export type QuestionLibraryItem = {
 
 export type WorkspaceProblem = {
   id: string
+  problemVersion?: number
   title: string
   starterCode: string
   interchangeableThreshold?: number
@@ -275,6 +276,7 @@ export function ProblemWorkspaceScreen(props: {
       className="workspace-shell"
       data-workspace-root="true"
       data-problem-id={route.problem.id}
+      data-problem-version={route.problem.problemVersion ?? 1}
       data-hint-tier-1={problemHints.tier1}
       data-hint-tier-2={problemHints.tier2}
       data-hint-tier-3={problemHints.tier3}
@@ -716,6 +718,35 @@ export function ProblemWorkspaceScreen(props: {
               Submit
             </button>
           </nav>
+          <section className="problem-flag-panel" aria-label="problem-flag-panel">
+            <div className="problem-flag-controls">
+              <label className="problem-flag-label" htmlFor="flag-problem-reason">
+                Flag reason
+              </label>
+              <select id="flag-problem-reason" defaultValue="incorrect_output">
+                <option value="incorrect_output">Incorrect output</option>
+                <option value="ambiguous_prompt">Ambiguous prompt</option>
+                <option value="insufficient_context">Insufficient context</option>
+                <option value="bad_hint">Bad hint</option>
+                <option value="other">Other</option>
+              </select>
+              <button className="flag-problem-button" type="button" id="flag-problem-button">
+                Flag Problem
+              </button>
+            </div>
+            <label className="problem-flag-notes-label" htmlFor="flag-problem-notes">
+              Notes
+            </label>
+            <textarea
+              id="flag-problem-notes"
+              className="problem-flag-notes"
+              rows={3}
+              placeholder="Briefly describe what looks incorrect or unclear."
+            />
+            <p className="flag-problem-status" id="flag-problem-status">
+              Spot an issue? Flag it and this card will be reviewed.
+            </p>
+          </section>
           <section className="debug-shell" aria-label="debug-shell">
             <header className="debug-shell-header">
               <p className="debug-shell-title">Debug Console</p>

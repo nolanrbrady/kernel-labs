@@ -706,6 +706,85 @@ textarea.code-editor {
   box-shadow: none;
 }
 
+.problem-flag-panel {
+  display: grid;
+  gap: 0.5rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+}
+
+.problem-flag-controls {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.problem-flag-label,
+.problem-flag-notes-label {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.problem-flag-controls select,
+.problem-flag-notes {
+  width: 100%;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  background: var(--bg-surface-solid);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.65rem;
+}
+
+.problem-flag-controls select:focus,
+.problem-flag-notes:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 24%, transparent);
+}
+
+.problem-flag-notes {
+  resize: vertical;
+  min-height: 64px;
+}
+
+.flag-problem-button {
+  padding: 0.55rem 0.85rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-medium);
+  background: var(--bg-surface-solid);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.flag-problem-button:hover {
+  border-color: var(--border-focus);
+  transform: translateY(-1px);
+}
+
+.flag-problem-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.flag-problem-status {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 /* ─── Debug Console ─── */
 
 .debug-shell {
@@ -1332,6 +1411,10 @@ textarea.code-editor {
 
   .workspace-actions {
     flex-direction: column;
+  }
+
+  .problem-flag-controls {
+    grid-template-columns: 1fr;
   }
 
   .test-case-tabs {

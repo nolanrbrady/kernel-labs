@@ -1,6 +1,12 @@
 /* Shared types for workspace client API contracts and lightweight DOM refs. */
 
 export type WorkspaceCorrectness = "pass" | "partial" | "fail"
+export type ProblemFlagReason =
+  | "incorrect_output"
+  | "ambiguous_prompt"
+  | "insufficient_context"
+  | "bad_hint"
+  | "other"
 
 export type ProgressAttemptLike = {
   problemId?: string
@@ -79,6 +85,29 @@ export type SchedulerDecisionRequestPayload = {
 export type SchedulerDecisionResponsePayload = {
   nextIntervalDays: number
   resurfacingPriority: number
+}
+
+export type FlagProblemRequestPayload = {
+  problemId: string
+  problemVersion: number
+  reason: ProblemFlagReason
+  notes?: string
+  sessionId: string
+  evaluationCorrectness?: WorkspaceCorrectness
+  evaluationExplanation?: string
+}
+
+export type FlagProblemResponsePayload = {
+  status: "accepted"
+  deduplicated: boolean
+  verificationStatus: "verified" | "needs_review" | "rejected"
+  triageAction: "queued_for_review" | "status_updated_to_needs_review"
+  reviewQueueSize: number
+  message: string
+  flag?: {
+    flagId: string
+    problemId: string
+  }
 }
 
 export type EventHandlerLike = (event?: unknown) => unknown

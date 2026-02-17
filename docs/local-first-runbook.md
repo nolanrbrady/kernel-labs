@@ -46,6 +46,8 @@ This runbook defines how to operate the MVP locally and the minimal path to serv
 - `POST /api/progress/sync-merge`: anonymous-to-account progress merge
 - `POST /api/scheduler/decision`: interval + priority calculation
 - `POST /api/scheduler/plan`: one-resurfaced-per-session planning
+- `POST /api/problems/flag`: user flag intake for problem-quality triage
+- `GET /api/problems/review-queue`: review queue snapshot + verification statuses
 
 ## Minimal Deployment Path
 1. Build and run as a single Node process (same as local startup command):

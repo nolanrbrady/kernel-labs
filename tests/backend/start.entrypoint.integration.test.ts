@@ -55,6 +55,10 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(rootHtml.includes("Implement Scaled Dot-Product Attention"), true)
   assert.equal(rootHtml.includes("Run"), true)
   assert.equal(rootHtml.includes("Submit"), true)
+  assert.equal(rootHtml.includes("Flag Problem"), true)
+  assert.equal(rootHtml.includes("flag-problem-button"), true)
+  assert.equal(rootHtml.includes("flag-problem-reason"), true)
+  assert.equal(rootHtml.includes("flag-problem-status"), true)
   assert.equal(rootHtml.includes("code-editor-shell"), true)
   assert.equal(rootHtml.includes("starter-code-editor"), true)
   assert.equal(rootHtml.includes("starter-code-highlight"), true)
@@ -217,6 +221,7 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(sessionControllersText.includes("/api/runtime/run"), true)
   assert.equal(sessionControllersText.includes("/api/session/submit"), true)
   assert.equal(sessionControllersText.includes("/api/scheduler/decision"), true)
+  assert.equal(sessionControllersText.includes("/api/problems/flag"), true)
   assert.equal(sessionControllersText.includes("$ run #"), true)
   assert.equal(sessionControllersText.includes("30-minute cap reached"), true)
 

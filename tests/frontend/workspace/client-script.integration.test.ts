@@ -1873,3 +1873,140 @@ test("workspace client script marks visible test-case tabs as pass after success
   assert.equal(testCaseStatusCase1.textContent, "Pass")
   assert.equal(testCaseStatusCase2.textContent, "Fail")
 })
+
+test("workspace client script submits problem flags with structured reason metadata", async () => {
+  const runButton = createFakeElement()
+  const submitButton = createFakeElement()
+  const codeEditor = createFakeElement("", "def solve(x):\n    return x")
+  const runStatus = createFakeElement("Run status: waiting for execution.")
+  const evaluationStatus = createFakeElement(
+    "Evaluation status: run code to generate feedback."
+  )
+  const sessionStatus = createFakeElement("Session status: active.")
+  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const flagProblemButton = createFakeElement()
+  const flagProblemReasonInput = createFakeElement("", "incorrect_output")
+  const flagProblemNotesInput = createFakeElement(
+    "",
+    "Hidden deterministic case does not match expected value."
+  )
+  const flagProblemStatus = createFakeElement(
+    "Spot an issue? Flag it and this card will be reviewed."
+  )
+  const debugShellOutput = createFakeElement(
+    "$ ready: run your code to inspect runtime and evaluator output."
+  )
+  const workspaceRoot = {
+    getAttribute(name: string): string | null {
+      if (name === "data-problem-id") {
+        return "attention_scaled_dot_product_v1"
+      }
+      if (name === "data-problem-version") {
+        return "1"
+      }
+
+      return null
+    }
+  }
+  const elements = new Map<string, FakeElement>([
+    ["run-button", runButton],
+    ["submit-button", submitButton],
+    ["starter-code-editor", codeEditor],
+    ["run-status", runStatus],
+    ["evaluation-status", evaluationStatus],
+    ["session-status", sessionStatus],
+    ["schedule-status", scheduleStatus],
+    ["flag-problem-button", flagProblemButton],
+    ["flag-problem-reason", flagProblemReasonInput],
+    ["flag-problem-notes", flagProblemNotesInput],
+    ["flag-problem-status", flagProblemStatus],
+    ["debug-shell-output", debugShellOutput]
+  ])
+  const fetchCalls: FetchCall[] = []
+  const fetchMock = async (
+    input: string | URL | Request,
+    init?: RequestInit
+  ): Promise<Response> => {
+    const inputText =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+    fetchCalls.push({ input: inputText, init })
+
+    if (inputText === "/api/problems/flag") {
+      return createMockResponse({
+        status: "accepted",
+        deduplicated: false,
+        verificationStatus: "needs_review",
+        triageAction: "status_updated_to_needs_review",
+        reviewQueueSize: 1,
+        message: "Flag recorded and card moved to needs_review."
+      })
+    }
+
+    throw new Error(`Unexpected fetch input: ${inputText}`)
+  }
+  const context = createContext({
+    document: {
+      querySelector(selector: string) {
+        if (selector === "[data-workspace-root]") {
+          return workspaceRoot
+        }
+
+        return null
+      },
+      getElementById(id: string) {
+        return elements.get(id) ?? null
+      }
+    },
+    fetch: fetchMock,
+    localStorage: {
+      getItem() {
+        return null
+      },
+      setItem() {
+        return undefined
+      }
+    },
+    Date: class extends Date {
+      static override now(): number {
+        return 1_733_000_000_000
+      }
+    }
+  })
+
+  runWorkspaceClientScripts(context)
+
+  await flagProblemButton.handlers.get("click")?.()
+
+  assert.equal(fetchCalls.length, 1)
+  assert.equal(fetchCalls[0]?.input, "/api/problems/flag")
+
+  const flagBody = JSON.parse(
+    String(fetchCalls[0]?.init?.body ?? "{}")
+  ) as {
+    problemId: string
+    problemVersion: number
+    reason: string
+    notes: string
+    sessionId: string
+  }
+  assert.equal(flagBody.problemId, "attention_scaled_dot_product_v1")
+  assert.equal(flagBody.problemVersion, 1)
+  assert.equal(flagBody.reason, "incorrect_output")
+  assert.equal(
+    flagBody.notes,
+    "Hidden deterministic case does not match expected value."
+  )
+  assert.equal(flagBody.sessionId, "session-1733000000000")
+  assert.equal(
+    flagProblemStatus.textContent,
+    "Flag submitted. Verification status: needs_review."
+  )
+  assert.equal(
+    debugShellOutput.textContent.includes("flag accepted"),
+    true
+  )
+})

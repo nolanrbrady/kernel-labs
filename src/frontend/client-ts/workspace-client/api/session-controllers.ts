@@ -14,6 +14,8 @@ import type {
   SchedulerDecisionResponsePayload,
   SubmitSessionRequestPayload,
   SubmitSessionResponsePayload,
+  FlagProblemRequestPayload,
+  FlagProblemResponsePayload,
   TextNodeLike,
   WorkspaceCorrectness
 } from "../shared/types.js"
@@ -38,6 +40,9 @@ export type WorkspaceApiAdapters = {
   requestSchedulerDecision: (
     payload: SchedulerDecisionRequestPayload
   ) => Promise<ApiEnvelope<SchedulerDecisionResponsePayload>>
+  flagProblem: (
+    payload: FlagProblemRequestPayload
+  ) => Promise<ApiEnvelope<FlagProblemResponsePayload>>
 }
 
 type CreateWorkspaceApiAdaptersOptions = {
@@ -146,6 +151,13 @@ export function createWorkspaceApiAdapters(
       return postJson<SchedulerDecisionResponsePayload>(
         fetchImpl,
         "/api/scheduler/decision",
+        payload
+      )
+    },
+    flagProblem(payload) {
+      return postJson<FlagProblemResponsePayload>(
+        fetchImpl,
+        "/api/problems/flag",
         payload
       )
     }

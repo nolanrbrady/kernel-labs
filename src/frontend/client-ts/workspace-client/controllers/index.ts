@@ -12,3 +12,4 @@ export {
   SubmissionController
 } from "../api/session-controllers.js"
 export { SuggestTopicController } from "./topic-controller.js"
+export { ProblemFlagController } from "./flag-controller.js"
