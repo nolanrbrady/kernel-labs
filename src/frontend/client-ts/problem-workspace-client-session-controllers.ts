@@ -1,14 +1,12 @@
 // @ts-nocheck
 /* Runtime/session API adapters and submission controllers. */
-(function (globalScope) {
-  var shared = globalScope.DeepMLSRWorkspaceClientControllerShared;
-  if (!shared) { return; }
-  var setText = shared.setText;
+import { setText } from "./problem-workspace-client-controller-shared.js";
+
   function createWorkspaceApiAdapters(options) {
     var safeOptions = options || {};
     var fetchImpl = safeOptions.fetchImpl;
-    if (typeof fetchImpl !== "function" && typeof globalScope.fetch === "function") {
-      fetchImpl = globalScope.fetch.bind(globalScope);
+    if (typeof fetchImpl !== "function" && typeof globalThis.fetch === "function") {
+      fetchImpl = globalThis.fetch.bind(globalThis);
     }
 
     async function postJson(endpoint, payload) {
@@ -460,8 +458,5 @@
       );
     }
   }
-  var controllers = globalScope.DeepMLSRWorkspaceClientControllers || (globalScope.DeepMLSRWorkspaceClientControllers = {});
-  controllers.createWorkspaceApiAdapters = createWorkspaceApiAdapters;
-  controllers.SessionController = SessionController;
-  controllers.SubmissionController = SubmissionController;
-})(typeof globalThis !== "undefined" ? globalThis : this);
+
+export { createWorkspaceApiAdapters, SessionController, SubmissionController };

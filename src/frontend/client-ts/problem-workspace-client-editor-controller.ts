@@ -1,10 +1,7 @@
 // @ts-nocheck
 /* Editor controller for workspace client. */
-(function (globalScope) {
-  var shared = globalScope.DeepMLSRWorkspaceClientControllerShared;
-  if (!shared) { return; }
-  var setClassFlag = shared.setClassFlag;
-  var escapeHtml = shared.escapeHtml;
+import { setClassFlag, escapeHtml } from "./problem-workspace-client-controller-shared.js";
+
   class EditorController {
     constructor(options) {
       this.codeEditor = options.codeEditor;
@@ -182,6 +179,5 @@
       this.codeHighlight.scrollLeft = this.codeEditor.scrollLeft || 0;
     }
   }
-  var controllers = globalScope.DeepMLSRWorkspaceClientControllers || (globalScope.DeepMLSRWorkspaceClientControllers = {});
-  controllers.EditorController = EditorController;
-})(typeof globalThis !== "undefined" ? globalThis : this);
+
+export { EditorController };

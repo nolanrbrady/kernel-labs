@@ -1,13 +1,8 @@
 // @ts-nocheck
 /* Workspace tab, visible test case, and question library controllers. */
-(function (globalScope) {
-  var domain = globalScope.DeepMLSRWorkspaceClientDomain;
-  var shared = globalScope.DeepMLSRWorkspaceClientControllerShared;
-  if (!domain || !shared) { return; }
-  var setText = shared.setText;
-  var setClassFlag = shared.setClassFlag;
-  var setTabActiveState = shared.setTabActiveState;
-  var setTabSelected = shared.setTabSelected;
+import { QuestionCatalog } from "./problem-workspace-client-domain.js";
+import { setText, setClassFlag, setTabActiveState, setTabSelected } from "./problem-workspace-client-controller-shared.js";
+
   class WorkspaceTabController {
     constructor(options) {
       this.workspaceTabProblem = options.workspaceTabProblem;
@@ -192,7 +187,7 @@
         return;
       }
 
-      var normalizedQuery = domain.QuestionCatalog.normalizeQueryText(
+      var normalizedQuery = QuestionCatalog.normalizeQueryText(
         this.questionSearchInput && typeof this.questionSearchInput.value === "string"
           ? this.questionSearchInput.value
           : ""
@@ -242,8 +237,5 @@
       }
     }
   }
-  var controllers = globalScope.DeepMLSRWorkspaceClientControllers || (globalScope.DeepMLSRWorkspaceClientControllers = {});
-  controllers.WorkspaceTabController = WorkspaceTabController;
-  controllers.VisibleTestCaseController = VisibleTestCaseController;
-  controllers.QuestionLibraryController = QuestionLibraryController;
-})(typeof globalThis !== "undefined" ? globalThis : this);
+
+export { WorkspaceTabController, VisibleTestCaseController, QuestionLibraryController };

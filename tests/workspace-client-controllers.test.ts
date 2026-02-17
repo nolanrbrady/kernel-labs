@@ -1,28 +1,20 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
 import test from "node:test"
-import { fileURLToPath } from "node:url"
-import { createContext, runInContext } from "node:vm"
-
-const currentDir = dirname(fileURLToPath(import.meta.url))
-const domainScriptSource = readFileSync(
-  join(currentDir, "..", "src", "frontend", "problem-workspace-client-domain.js"),
-  "utf-8"
-)
-const controllerScriptSources = [
-  "problem-workspace-client-controllers.js",
-  "problem-workspace-client-controller-shared.js",
-  "problem-workspace-client-editor-controller.js",
-  "problem-workspace-client-workspace-controllers.js",
-  "problem-workspace-client-session-controllers.js",
-  "problem-workspace-client-topic-controller.js"
-].map((fileName) => {
-  return readFileSync(
-    join(currentDir, "..", "src", "frontend", fileName),
-    "utf-8"
-  )
-})
+import {
+  QuestionCatalog,
+  VisibleTestCaseTracker,
+  SuggestTopicFormValidator
+} from "../src/frontend/client-ts/problem-workspace-client-domain.js"
+import {
+  createWorkspaceApiAdapters,
+  EditorController,
+  WorkspaceTabController,
+  VisibleTestCaseController,
+  QuestionLibraryController,
+  SessionController,
+  SubmissionController,
+  SuggestTopicController
+} from "../src/frontend/client-ts/problem-workspace-client-controllers.js"
 
 type EventHandler = (event?: {
   key?: string
@@ -122,14 +114,12 @@ function createMockResponse(payload: unknown, status = 200): Response {
 }
 
 function loadControllerClasses() {
-  const context = createContext({})
-  runInContext(domainScriptSource, context)
-  for (const source of controllerScriptSources) {
-    runInContext(source, context)
-  }
-
   return {
-    domain: context.DeepMLSRWorkspaceClientDomain as {
+    domain: {
+      QuestionCatalog,
+      VisibleTestCaseTracker,
+      SuggestTopicFormValidator
+    } as {
       QuestionCatalog: new (options: {
         rawCatalog?: string
         problemId?: string
@@ -137,7 +127,16 @@ function loadControllerClasses() {
       VisibleTestCaseTracker: new (rawVisibleTestCaseIds?: string) => unknown
       SuggestTopicFormValidator: new () => unknown
     },
-    controllers: context.DeepMLSRWorkspaceClientControllers as {
+    controllers: {
+      createWorkspaceApiAdapters,
+      EditorController,
+      WorkspaceTabController,
+      VisibleTestCaseController,
+      QuestionLibraryController,
+      SessionController,
+      SubmissionController,
+      SuggestTopicController
+    } as {
       createWorkspaceApiAdapters: (options: {
         fetchImpl?: (
           input: string | URL | Request,
@@ -394,7 +393,7 @@ test("submission controller submits session and keeps done state when sync fails
   const debugLines: string[] = []
   const priorProgress = { version: 1, attemptHistory: [] }
   const persistedProgress = { version: 1, attemptHistory: [{ correctness: "partial" }] }
-  let schedulerPayload: Record<string, unknown> | null = null
+  let schedulerPayload: Record<string, unknown> = {}
   let stopTimerCalls = 0
 
   const submissionController = new controllers.SubmissionController({
@@ -480,11 +479,11 @@ test("submission controller submits session and keeps done state when sync fails
     scheduleStatus.textContent,
     "Scheduling status: next resurfacing in 4 day(s), priority 0.38."
   )
-  assert.equal(schedulerPayload?.correctness, "partial")
-  assert.equal(schedulerPayload?.timeSpentMinutes, 7)
-  assert.equal(schedulerPayload?.hintTierUsed, 2)
-  assert.equal(schedulerPayload?.priorSuccessfulCompletions, 1)
-  assert.equal(schedulerPayload?.daysSinceLastExposure, 2)
+  assert.equal(schedulerPayload.correctness, "partial")
+  assert.equal(schedulerPayload.timeSpentMinutes, 7)
+  assert.equal(schedulerPayload.hintTierUsed, 2)
+  assert.equal(schedulerPayload.priorSuccessfulCompletions, 1)
+  assert.equal(schedulerPayload.daysSinceLastExposure, 2)
   assert.equal(debugLines.includes("$ submit (attention_scaled_dot_product_v1)"), true)
   assert.equal(debugLines.includes("> submit accepted: done - Session complete."), true)
   assert.equal(submitButton.disabled, false)

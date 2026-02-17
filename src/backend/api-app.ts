@@ -150,7 +150,7 @@ function renderHtmlDocument(
 ): string {
   const versionQuery = `?v=${encodeURIComponent(staticAssetVersion)}`
   const clientScriptTag = options.includeClientScript
-    ? `\n    <script src="/static/problem-workspace-client-domain.js${versionQuery}" defer></script>\n    <script src="/static/problem-workspace-client-controllers.js${versionQuery}" defer></script>\n    <script src="/static/problem-workspace-client-controller-shared.js${versionQuery}" defer></script>\n    <script src="/static/problem-workspace-client-editor-controller.js${versionQuery}" defer></script>\n    <script src="/static/problem-workspace-client-workspace-controllers.js${versionQuery}" defer></script>\n    <script src="/static/problem-workspace-client-session-controllers.js${versionQuery}" defer></script>\n    <script src="/static/problem-workspace-client-topic-controller.js${versionQuery}" defer></script>\n    <script src="/static/problem-workspace-client.js${versionQuery}" defer></script>`
+    ? `\n    <script type="module" src="/static/problem-workspace-client.js${versionQuery}"></script>`
     : ""
 
   return `<!doctype html>

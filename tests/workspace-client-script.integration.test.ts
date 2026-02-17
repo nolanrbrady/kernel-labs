@@ -1,32 +1,7 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
-import { join, dirname } from "node:path"
 import test from "node:test"
-import { fileURLToPath } from "node:url"
-import { createContext, runInContext } from "node:vm"
-
-const currentDir = dirname(fileURLToPath(import.meta.url))
-const domainScriptSource = readFileSync(
-  join(currentDir, "..", "src", "frontend", "problem-workspace-client-domain.js"),
-  "utf-8"
-)
-const controllerScriptSources = [
-  "problem-workspace-client-controllers.js",
-  "problem-workspace-client-controller-shared.js",
-  "problem-workspace-client-editor-controller.js",
-  "problem-workspace-client-workspace-controllers.js",
-  "problem-workspace-client-session-controllers.js",
-  "problem-workspace-client-topic-controller.js"
-].map((fileName) => {
-  return readFileSync(
-    join(currentDir, "..", "src", "frontend", fileName),
-    "utf-8"
-  )
-})
-const clientScriptSource = readFileSync(
-  join(currentDir, "..", "src", "frontend", "problem-workspace-client.js"),
-  "utf-8"
-)
+import { createContext } from "node:vm"
+import { initializeProblemWorkspaceClient } from "../src/frontend/client-ts/problem-workspace-client.js"
 
 type EventHandler = (event?: {
   key?: string
@@ -57,6 +32,13 @@ type FetchCall = {
   input: string
   init: RequestInit | undefined
 }
+
+const originalDocument = (globalThis as { document?: unknown }).document
+const originalFetch = (globalThis as { fetch?: unknown }).fetch
+const originalLocalStorage = (globalThis as { localStorage?: unknown }).localStorage
+const originalDate = Date
+const originalSetInterval = (globalThis as { setInterval?: unknown }).setInterval
+const originalClearInterval = (globalThis as { clearInterval?: unknown }).clearInterval
 
 function createFakeElement(
   textContent = "",
@@ -119,12 +101,33 @@ function createMockResponse(payload: unknown, status = 200): Response {
 }
 
 function runWorkspaceClientScripts(context: ReturnType<typeof createContext>) {
-  runInContext(domainScriptSource, context)
-  for (const source of controllerScriptSources) {
-    runInContext(source, context)
+  ;(globalThis as { document?: unknown }).document = context.document
+  ;(globalThis as { fetch?: unknown }).fetch = context.fetch
+  ;(globalThis as { localStorage?: unknown }).localStorage = context.localStorage
+
+  if (typeof context.Date === "function") {
+    ;(globalThis as { Date: DateConstructor }).Date = context.Date as DateConstructor
   }
-  runInContext(clientScriptSource, context)
+  ;(globalThis as { setInterval?: unknown }).setInterval =
+    typeof context.setInterval === "function"
+      ? context.setInterval
+      : (() => 0)
+  ;(globalThis as { clearInterval?: unknown }).clearInterval =
+    typeof context.clearInterval === "function"
+      ? context.clearInterval
+      : (() => undefined)
+
+  initializeProblemWorkspaceClient()
 }
+
+test.afterEach(() => {
+  ;(globalThis as { document?: unknown }).document = originalDocument
+  ;(globalThis as { fetch?: unknown }).fetch = originalFetch
+  ;(globalThis as { localStorage?: unknown }).localStorage = originalLocalStorage
+  ;(globalThis as { Date: DateConstructor }).Date = originalDate
+  ;(globalThis as { setInterval?: unknown }).setInterval = originalSetInterval
+  ;(globalThis as { clearInterval?: unknown }).clearInterval = originalClearInterval
+})
 
 test("workspace client script wires run then submit and stores anonymous progress", async () => {
   const runButton = createFakeElement()

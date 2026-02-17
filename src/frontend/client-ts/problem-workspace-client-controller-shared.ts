@@ -1,6 +1,5 @@
 // @ts-nocheck
 /* Shared controller utilities for workspace client scripts. */
-(function (globalScope) {
   function setText(node, text) {
     if (!node) {
       return;
@@ -62,11 +61,4 @@
       .replace(/'/g, "&#39;");
   }
 
-  globalScope.DeepMLSRWorkspaceClientControllerShared = {
-    setText: setText,
-    setClassFlag: setClassFlag,
-    setTabActiveState: setTabActiveState,
-    setTabSelected: setTabSelected,
-    escapeHtml: escapeHtml
-  };
-})(typeof globalThis !== "undefined" ? globalThis : this);
+export { setText, setClassFlag, setTabActiveState, setTabSelected, escapeHtml };

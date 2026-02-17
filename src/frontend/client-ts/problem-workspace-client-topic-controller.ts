@@ -1,10 +1,7 @@
 // @ts-nocheck
 /* Suggest-topic interaction controller for workspace client. */
-(function (globalScope) {
-  var shared = globalScope.DeepMLSRWorkspaceClientControllerShared;
-  if (!shared) { return; }
-  var setText = shared.setText;
-  var setClassFlag = shared.setClassFlag;
+import { setText, setClassFlag } from "./problem-workspace-client-controller-shared.js";
+
   class SuggestTopicController {
     constructor(options) {
       this.validator = options.validator;
@@ -212,6 +209,5 @@
       }
     }
   }
-  var controllers = globalScope.DeepMLSRWorkspaceClientControllers || (globalScope.DeepMLSRWorkspaceClientControllers = {});
-  controllers.SuggestTopicController = SuggestTopicController;
-})(typeof globalThis !== "undefined" ? globalThis : this);
+
+export { SuggestTopicController };

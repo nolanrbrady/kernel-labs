@@ -1,116 +1,18 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
 import test from "node:test"
-import { fileURLToPath } from "node:url"
-import { createContext, runInContext } from "node:vm"
-
-const currentDir = dirname(fileURLToPath(import.meta.url))
-const domainScriptSource = readFileSync(
-  join(currentDir, "..", "src", "frontend", "problem-workspace-client-domain.js"),
-  "utf-8"
-)
+import {
+  QuestionCatalog,
+  VisibleTestCaseTracker,
+  SuggestTopicFormValidator,
+  AnonymousProgressStore
+} from "../src/frontend/client-ts/problem-workspace-client-domain.js"
 
 function loadDomainClasses() {
-  const context = createContext({})
-  runInContext(domainScriptSource, context)
-  return context.DeepMLSRWorkspaceClientDomain as {
-    QuestionCatalog: new (options: {
-      rawCatalog?: string | null
-      problemId?: string
-    }) => {
-      getCatalog: () => Array<{
-        id: string
-        title: string
-        problemType: string
-        summary: string
-        estimatedMinutes: number
-      }>
-      computeFuzzyScore: (query: string, text: string) => number
-      filterQuestions: (query: string, selectedType: string) => Array<{
-        id: string
-        title: string
-        problemType: string
-        summary: string
-        estimatedMinutes: number
-      }>
-      renderQuestionListHtml: (questions: Array<{
-        id: string
-        title: string
-        problemType: string
-        summary: string
-        estimatedMinutes: number
-      }>) => string
-    }
-    VisibleTestCaseTracker: new (rawVisibleTestCaseIds?: string | null) => {
-      getVisibleTestCaseIds: () => string[]
-      getInitialActiveCaseId: () => string | null
-      buildResetState: (statusLabel: string) => {
-        statusByCaseId: Record<
-          string,
-          { statusLabel: string; isPass: boolean; isFail: boolean }
-        >
-        passedCount: number
-        totalCount: number
-      }
-      summarizeResults: (results: unknown[]) => {
-        statusByCaseId: Record<
-          string,
-          { statusLabel: string; isPass: boolean; isFail: boolean }
-        >
-        passedCount: number
-        totalCount: number
-      }
-    }
-    SuggestTopicFormValidator: new () => {
-      validateRequiredFields: (fields: Record<string, string>) => {
-        isValid: boolean
-        missingLabels: string[]
-      }
-      buildCompletionSummary: (problemType: string, title: string) => string
-    }
-    AnonymousProgressStore: new (options: {
-      storage?: {
-        getItem: (key: string) => string | null
-        setItem: (key: string, value: string) => void
-      } | null
-      storageKey: string
-      problemId: string
-      nowProvider?: () => number
-    }) => {
-      read: () => {
-        version: number
-        completedProblemIds: string[]
-        attemptHistory: Array<{
-          problemId: string
-          correctness: string
-          submittedAt: string
-        }>
-      }
-      persistAttempt: (correctness: string) => {
-        version: number
-        completedProblemIds: string[]
-        attemptHistory: Array<{
-          problemId: string
-          correctness: string
-          submittedAt: string
-        }>
-      }
-      getPriorSuccessfulCompletions: (progress: {
-        attemptHistory: Array<{
-          problemId: string
-          correctness: string
-          submittedAt: string
-        }>
-      }) => number
-      getDaysSinceLastExposure: (progress: {
-        attemptHistory: Array<{
-          problemId: string
-          correctness: string
-          submittedAt: string
-        }>
-      }) => number
-    }
+  return {
+    QuestionCatalog,
+    VisibleTestCaseTracker,
+    SuggestTopicFormValidator,
+    AnonymousProgressStore
   }
 }
 
@@ -215,9 +117,13 @@ test("visible test-case tracker summarizes statuses for pass/fail/not-run paths"
   assert.equal(tracker.getInitialActiveCaseId(), "case_1_balanced_tokens")
 
   const resetState = tracker.buildResetState("Running...")
+  const resetStatusByCaseId = resetState.statusByCaseId as Record<
+    string,
+    { statusLabel: string; isPass: boolean; isFail: boolean }
+  >
   assert.equal(resetState.totalCount, 2)
   assert.deepEqual(
-    toPlain(resetState.statusByCaseId["case_2_causal_masking"]),
+    toPlain(resetStatusByCaseId["case_2_causal_masking"]),
     {
       statusLabel: "Running...",
       isPass: false,
@@ -235,10 +141,14 @@ test("visible test-case tracker summarizes statuses for pass/fail/not-run paths"
       passed: false
     }
   ])
+  const resultStatusByCaseId = resultState.statusByCaseId as Record<
+    string,
+    { statusLabel: string; isPass: boolean; isFail: boolean }
+  >
 
   assert.equal(resultState.passedCount, 1)
   assert.deepEqual(
-    toPlain(resultState.statusByCaseId["case_1_balanced_tokens"]),
+    toPlain(resultStatusByCaseId["case_1_balanced_tokens"]),
     {
       statusLabel: "Pass",
       isPass: true,
@@ -246,7 +156,7 @@ test("visible test-case tracker summarizes statuses for pass/fail/not-run paths"
     }
   )
   assert.deepEqual(
-    toPlain(resultState.statusByCaseId["case_2_causal_masking"]),
+    toPlain(resultStatusByCaseId["case_2_causal_masking"]),
     {
       statusLabel: "Fail",
       isPass: false,
@@ -308,10 +218,10 @@ test("anonymous progress store persists attempts and computes scheduling metrics
 
   const store = new AnonymousProgressStore({
     storage: {
-      getItem(key) {
+      getItem(key: string) {
         return storageMap.get(key) ?? null
       },
-      setItem(key, value) {
+      setItem(key: string, value: string) {
         storageMap.set(key, value)
       }
     },

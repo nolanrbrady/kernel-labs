@@ -1,18 +1,25 @@
 // @ts-nocheck
-/* Client-side interactivity for the problem workspace screen.
-   This file is read at server startup and inlined into the HTML document. */
+/* Client-side interactivity for the problem workspace screen. */
+import {
+  QuestionCatalog,
+  VisibleTestCaseTracker,
+  SuggestTopicFormValidator,
+  AnonymousProgressStore
+} from "./problem-workspace-client-domain.js";
+import {
+  createWorkspaceApiAdapters,
+  EditorController,
+  WorkspaceTabController,
+  VisibleTestCaseController,
+  QuestionLibraryController,
+  SessionController,
+  SubmissionController,
+  SuggestTopicController
+} from "./problem-workspace-client-controllers.js";
 
-(function () {
+export function initializeProblemWorkspaceClient() {
   var workspaceRoot = document.querySelector("[data-workspace-root]");
   if (!workspaceRoot) {
-    return;
-  }
-  var domain = globalThis.DeepMLSRWorkspaceClientDomain;
-  if (!domain) {
-    return;
-  }
-  var uiControllers = globalThis.DeepMLSRWorkspaceClientControllers;
-  if (!uiControllers) {
     return;
   }
 
@@ -84,7 +91,7 @@
   if (!runButton || !submitButton || !codeEditor || !runStatus || !evaluationStatus || !sessionStatus || !problemId) {
     return;
   }
-  var localProgressStore = new domain.AnonymousProgressStore({
+  var localProgressStore = new AnonymousProgressStore({
     storage: typeof localStorage !== "undefined" ? localStorage : null,
     storageKey: localProgressStorageKey,
     problemId: problemId,
@@ -92,12 +99,12 @@
       return Date.now();
     }
   });
-  var suggestTopicValidator = new domain.SuggestTopicFormValidator();
-  var questionCatalogModel = new domain.QuestionCatalog({
+  var suggestTopicValidator = new SuggestTopicFormValidator();
+  var questionCatalogModel = new QuestionCatalog({
     rawCatalog: workspaceRoot.getAttribute("data-question-catalog"),
     problemId: problemId
   });
-  var visibleTestCaseTracker = new domain.VisibleTestCaseTracker(rawVisibleTestCaseIds);
+  var visibleTestCaseTracker = new VisibleTestCaseTracker(rawVisibleTestCaseIds);
   var visibleTestCaseController = null;
   var questionLibraryController = null;
 
@@ -117,7 +124,7 @@
 
   // ─── UI Controllers ───
 
-  var editorController = new uiControllers.EditorController({
+  var editorController = new EditorController({
     codeEditor: codeEditor,
     codeHighlight: codeHighlight,
     codeEditorShell: codeEditorShell,
@@ -125,25 +132,25 @@
       startSessionTimer(sourceLabel);
     }
   });
-  var workspaceTabController = new uiControllers.WorkspaceTabController({
+  var workspaceTabController = new WorkspaceTabController({
     workspaceTabProblem: workspaceTabProblem,
     workspaceTabLibrary: workspaceTabLibrary,
     workspaceProblemTabPanel: workspaceProblemTabPanel,
     workspaceLibraryTabPanel: workspaceLibraryTabPanel
   });
-  visibleTestCaseController = new uiControllers.VisibleTestCaseController({
+  visibleTestCaseController = new VisibleTestCaseController({
     documentRef: document,
     tracker: visibleTestCaseTracker,
     appendDebugLine: appendDebugLine
   });
-  questionLibraryController = new uiControllers.QuestionLibraryController({
+  questionLibraryController = new QuestionLibraryController({
     catalogModel: questionCatalogModel,
     questionSearchInput: questionSearchInput,
     questionTypeFilter: questionTypeFilter,
     questionLibraryResults: questionLibraryResults,
     questionLibraryCount: questionLibraryCount
   });
-  var suggestTopicController = new uiControllers.SuggestTopicController({
+  var suggestTopicController = new SuggestTopicController({
     validator: suggestTopicValidator,
     questionTypeFilter: questionTypeFilter,
     suggestTopicButton: suggestTopicButton,
@@ -185,10 +192,10 @@
     visibleTestCaseController.applyResults(results);
   }
 
-  var apiAdapters = uiControllers.createWorkspaceApiAdapters({
+  var apiAdapters = createWorkspaceApiAdapters({
     fetchImpl: typeof fetch === "function" ? fetch : null
   });
-  var sessionController = new uiControllers.SessionController({
+  var sessionController = new SessionController({
     problemId: problemId,
     codeEditor: codeEditor,
     runButton: runButton,
@@ -205,7 +212,7 @@
       return Date.now();
     }
   });
-  var submissionController = new uiControllers.SubmissionController({
+  var submissionController = new SubmissionController({
     problemId: problemId,
     submitButton: submitButton,
     sessionStatus: sessionStatus,
@@ -530,4 +537,8 @@
   visibleTestCaseController.bind();
   sessionController.bind();
   submissionController.bind();
-})();
+}
+
+if (typeof document !== "undefined") {
+  initializeProblemWorkspaceClient();
+}

@@ -36,13 +36,7 @@ test("single start entrypoint serves health API and editor-first workspace", asy
 
   // HTML document references external static assets
   assert.equal(rootHtml.includes('href="/static/problem-workspace.css?v='), true)
-  assert.equal(rootHtml.includes('src="/static/problem-workspace-client-domain.js?v='), true)
-  assert.equal(rootHtml.includes('src="/static/problem-workspace-client-controllers.js?v='), true)
-  assert.equal(rootHtml.includes('src="/static/problem-workspace-client-controller-shared.js?v='), true)
-  assert.equal(rootHtml.includes('src="/static/problem-workspace-client-editor-controller.js?v='), true)
-  assert.equal(rootHtml.includes('src="/static/problem-workspace-client-workspace-controllers.js?v='), true)
-  assert.equal(rootHtml.includes('src="/static/problem-workspace-client-session-controllers.js?v='), true)
-  assert.equal(rootHtml.includes('src="/static/problem-workspace-client-topic-controller.js?v='), true)
+  assert.equal(rootHtml.includes('type="module" src="/static/problem-workspace-client.js?v='), true)
   assert.equal(rootHtml.includes('src="/static/problem-workspace-client.js?v='), true)
   assert.equal(rootHtml.includes("data-theme=\"deepmlsr-workspace\""), true)
 
@@ -137,8 +131,11 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(jsResponse.status, 200)
   assert.equal(jsResponse.headers.get("content-type")?.includes("javascript"), true)
   const jsText = await jsResponse.text()
-  assert.equal(jsText.includes("new uiControllers.SessionController"), true)
-  assert.equal(jsText.includes("new uiControllers.SubmissionController"), true)
+  assert.equal(jsText.includes("initializeProblemWorkspaceClient"), true)
+  assert.equal(jsText.includes("from \"./problem-workspace-client-domain.js\""), true)
+  assert.equal(jsText.includes("from \"./problem-workspace-client-controllers.js\""), true)
+  assert.equal(jsText.includes("new SessionController"), true)
+  assert.equal(jsText.includes("new SubmissionController"), true)
   assert.equal(jsText.includes("submissionController.submitSession(\"timer-cap\")"), true)
 
   const domainResponse = await fetch(`${base}/static/problem-workspace-client-domain.js`)
@@ -153,13 +150,14 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(controllerResponse.status, 200)
   assert.equal(controllerResponse.headers.get("content-type")?.includes("javascript"), true)
   const controllerText = await controllerResponse.text()
-  assert.equal(controllerText.includes("DeepMLSRWorkspaceClientControllers"), true)
+  assert.equal(controllerText.includes("export { EditorController }"), true)
 
   const sharedControllerResponse = await fetch(`${base}/static/problem-workspace-client-controller-shared.js`)
   assert.equal(sharedControllerResponse.status, 200)
   assert.equal(sharedControllerResponse.headers.get("content-type")?.includes("javascript"), true)
   const sharedControllerText = await sharedControllerResponse.text()
-  assert.equal(sharedControllerText.includes("DeepMLSRWorkspaceClientControllerShared"), true)
+  assert.equal(sharedControllerText.includes("function setClassFlag"), true)
+  assert.equal(sharedControllerText.includes("export { setText"), true)
   assert.equal(sharedControllerText.includes("setClassFlag"), true)
 
   const editorControllerResponse = await fetch(`${base}/static/problem-workspace-client-editor-controller.js`)

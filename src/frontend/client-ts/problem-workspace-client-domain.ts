@@ -2,7 +2,6 @@
 /* Domain-layer classes for workspace client logic.
    These classes stay side-effect-light so behavior remains easy to test. */
 
-(function (globalScope) {
   function normalizeQueryText(value) {
     if (typeof value !== "string") {
       return "";
@@ -552,10 +551,10 @@
     }
   }
 
-  globalScope.DeepMLSRWorkspaceClientDomain = {
-    QuestionCatalog: QuestionCatalog,
-    VisibleTestCaseTracker: VisibleTestCaseTracker,
-    SuggestTopicFormValidator: SuggestTopicFormValidator,
-    AnonymousProgressStore: AnonymousProgressStore
-  };
-})(typeof globalThis !== "undefined" ? globalThis : this);
+
+export {
+  QuestionCatalog,
+  VisibleTestCaseTracker,
+  SuggestTopicFormValidator,
+  AnonymousProgressStore
+};
