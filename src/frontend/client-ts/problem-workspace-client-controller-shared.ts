@@ -1,64 +1,81 @@
-// @ts-nocheck
 /* Shared controller utilities for workspace client scripts. */
-  function setText(node, text) {
-    if (!node) {
-      return;
-    }
 
-    node.textContent = text;
+import type {
+  ClassNameNodeLike,
+  TabNodeLike,
+  TextNodeLike
+} from "./problem-workspace-client-types.js"
+
+export function setText(
+  node: TextNodeLike | null | undefined,
+  text: string
+): void {
+  if (!node) {
+    return
   }
 
-  function setClassFlag(node, classToken, enabled) {
-    if (!node || typeof node.className !== "string") {
-      return;
-    }
+  node.textContent = text
+}
 
-    var tokenRegex = new RegExp("(^|\\s)" + classToken + "(?=\\s|$)", "g");
-    var normalizedClassName = node.className
-      .replace(tokenRegex, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    node.className = enabled
-      ? (normalizedClassName + " " + classToken).trim()
-      : normalizedClassName;
+export function setClassFlag(
+  node: ClassNameNodeLike | null | undefined,
+  classToken: string,
+  enabled: boolean
+): void {
+  if (!node || typeof node.className !== "string") {
+    return
   }
 
-  function setTabActiveState(tabElement, isActive) {
-    if (!tabElement || typeof tabElement.className !== "string") {
-      return;
-    }
+  const tokenRegex = new RegExp(`(^|\\s)${classToken}(?=\\s|$)`, "g")
+  const normalizedClassName = node.className
+    .replace(tokenRegex, " ")
+    .replace(/\s+/g, " ")
+    .trim()
 
-    var normalizedClassName = tabElement.className
-      .replace(/\bis-active\b/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
+  node.className = enabled
+    ? `${normalizedClassName} ${classToken}`.trim()
+    : normalizedClassName
+}
 
-    tabElement.className = isActive
-      ? (normalizedClassName + " is-active").trim()
-      : normalizedClassName;
+export function setTabActiveState(
+  tabElement: TabNodeLike | null | undefined,
+  isActive: boolean
+): void {
+  if (!tabElement || typeof tabElement.className !== "string") {
+    return
   }
 
-  function setTabSelected(tabElement, isSelected) {
-    if (!tabElement) {
-      return;
-    }
+  const normalizedClassName = tabElement.className
+    .replace(/\bis-active\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
 
-    if (typeof tabElement.setAttribute === "function") {
-      tabElement.setAttribute("aria-selected", isSelected ? "true" : "false");
-      return;
-    }
+  tabElement.className = isActive
+    ? `${normalizedClassName} is-active`.trim()
+    : normalizedClassName
+}
 
-    tabElement.ariaSelected = isSelected ? "true" : "false";
+export function setTabSelected(
+  tabElement: TabNodeLike | null | undefined,
+  isSelected: boolean
+): void {
+  if (!tabElement) {
+    return
   }
 
-  function escapeHtml(value) {
-    return String(value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/\"/g, "&quot;")
-      .replace(/'/g, "&#39;");
+  if (typeof tabElement.setAttribute === "function") {
+    tabElement.setAttribute("aria-selected", isSelected ? "true" : "false")
+    return
   }
 
-export { setText, setClassFlag, setTabActiveState, setTabSelected, escapeHtml };
+  tabElement.ariaSelected = isSelected ? "true" : "false"
+}
+
+export function escapeHtml(value: unknown): string {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}

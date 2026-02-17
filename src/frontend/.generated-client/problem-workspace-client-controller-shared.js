@@ -1,37 +1,36 @@
-// @ts-nocheck
 /* Shared controller utilities for workspace client scripts. */
-function setText(node, text) {
+export function setText(node, text) {
     if (!node) {
         return;
     }
     node.textContent = text;
 }
-function setClassFlag(node, classToken, enabled) {
+export function setClassFlag(node, classToken, enabled) {
     if (!node || typeof node.className !== "string") {
         return;
     }
-    var tokenRegex = new RegExp("(^|\\s)" + classToken + "(?=\\s|$)", "g");
-    var normalizedClassName = node.className
+    const tokenRegex = new RegExp(`(^|\\s)${classToken}(?=\\s|$)`, "g");
+    const normalizedClassName = node.className
         .replace(tokenRegex, " ")
         .replace(/\s+/g, " ")
         .trim();
     node.className = enabled
-        ? (normalizedClassName + " " + classToken).trim()
+        ? `${normalizedClassName} ${classToken}`.trim()
         : normalizedClassName;
 }
-function setTabActiveState(tabElement, isActive) {
+export function setTabActiveState(tabElement, isActive) {
     if (!tabElement || typeof tabElement.className !== "string") {
         return;
     }
-    var normalizedClassName = tabElement.className
+    const normalizedClassName = tabElement.className
         .replace(/\bis-active\b/g, "")
         .replace(/\s+/g, " ")
         .trim();
     tabElement.className = isActive
-        ? (normalizedClassName + " is-active").trim()
+        ? `${normalizedClassName} is-active`.trim()
         : normalizedClassName;
 }
-function setTabSelected(tabElement, isSelected) {
+export function setTabSelected(tabElement, isSelected) {
     if (!tabElement) {
         return;
     }
@@ -41,12 +40,11 @@ function setTabSelected(tabElement, isSelected) {
     }
     tabElement.ariaSelected = isSelected ? "true" : "false";
 }
-function escapeHtml(value) {
+export function escapeHtml(value) {
     return String(value)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
-        .replace(/\"/g, "&quot;")
+        .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
 }
-export { setText, setClassFlag, setTabActiveState, setTabSelected, escapeHtml };

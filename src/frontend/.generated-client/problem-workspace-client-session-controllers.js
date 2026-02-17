@@ -1,53 +1,72 @@
-// @ts-nocheck
 /* Runtime/session API adapters and submission controllers. */
 import { setText } from "./problem-workspace-client-controller-shared.js";
-function createWorkspaceApiAdapters(options) {
-    var safeOptions = options || {};
-    var fetchImpl = safeOptions.fetchImpl;
-    if (typeof fetchImpl !== "function" && typeof globalThis.fetch === "function") {
-        fetchImpl = globalThis.fetch.bind(globalThis);
-    }
-    async function postJson(endpoint, payload) {
-        if (typeof fetchImpl !== "function") {
-            throw new Error("Fetch API unavailable.");
-        }
-        var response = await fetchImpl(endpoint, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(payload)
-        });
-        var responsePayload = await response.json();
-        return {
-            ok: response.ok,
-            status: response.status,
-            payload: responsePayload
-        };
+async function postJson(fetchImpl, endpoint, payload) {
+    const response = await fetchImpl(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+    });
+    const responsePayload = (await response.json());
+    return {
+        ok: response.ok,
+        status: response.status,
+        payload: responsePayload
+    };
+}
+export function createWorkspaceApiAdapters(options = {}) {
+    const providedFetch = options.fetchImpl;
+    const fetchImpl = typeof providedFetch === "function"
+        ? providedFetch
+        : typeof globalThis.fetch === "function"
+            ? globalThis.fetch.bind(globalThis)
+            : null;
+    if (typeof fetchImpl !== "function") {
+        throw new Error("Fetch API unavailable.");
     }
     return {
-        runRuntime: function (problemId, userCode) {
-            return postJson("/api/runtime/run", {
-                problemId: problemId,
-                userCode: userCode
+        runRuntime(problemId, userCode) {
+            return postJson(fetchImpl, "/api/runtime/run", {
+                problemId,
+                userCode
             });
         },
-        evaluateOutput: function (problemId, candidateOutput) {
-            return postJson("/api/evaluator/evaluate", {
-                problemId: problemId,
-                candidateOutput: candidateOutput
+        evaluateOutput(problemId, candidateOutput) {
+            return postJson(fetchImpl, "/api/evaluator/evaluate", {
+                problemId,
+                candidateOutput
             });
         },
-        submitSession: function (payload) {
-            return postJson("/api/session/submit", payload);
+        submitSession(payload) {
+            return postJson(fetchImpl, "/api/session/submit", payload);
         },
-        syncAnonymousProgress: function (payload) {
-            return postJson("/api/progress/anonymous", payload);
+        syncAnonymousProgress(payload) {
+            return postJson(fetchImpl, "/api/progress/anonymous", payload);
         },
-        requestSchedulerDecision: function (payload) {
-            return postJson("/api/scheduler/decision", payload);
+        requestSchedulerDecision(payload) {
+            return postJson(fetchImpl, "/api/scheduler/decision", payload);
         }
     };
 }
-class SessionController {
+function isRuntimeSuccessPayload(payload) {
+    return payload.status === "success";
+}
+export class SessionController {
+    problemId;
+    codeEditor;
+    runButton;
+    runStatus;
+    evaluationStatus;
+    sessionStatus;
+    scheduleStatus;
+    api;
+    appendDebugLine;
+    formatDebugValue;
+    resetVisibleTestCaseStatuses;
+    applyVisibleTestCaseResults;
+    nowProvider;
+    sessionId;
+    lastEvaluation = null;
+    runAttemptCount = 0;
     constructor(options) {
         this.problemId = options.problemId;
         this.codeEditor = options.codeEditor;
@@ -61,15 +80,8 @@ class SessionController {
         this.formatDebugValue = options.formatDebugValue;
         this.resetVisibleTestCaseStatuses = options.resetVisibleTestCaseStatuses;
         this.applyVisibleTestCaseResults = options.applyVisibleTestCaseResults;
-        this.nowProvider =
-            typeof options.nowProvider === "function"
-                ? options.nowProvider
-                : function () {
-                    return Date.now();
-                };
-        this.sessionId = "session-" + this.nowProvider();
-        this.lastEvaluation = null;
-        this.runAttemptCount = 0;
+        this.nowProvider = options.nowProvider ?? (() => Date.now());
+        this.sessionId = `session-${this.nowProvider()}`;
     }
     getSessionId() {
         return this.sessionId;
@@ -89,7 +101,7 @@ class SessionController {
         }
     }
     readEditorCode() {
-        if (this.codeEditor && typeof this.codeEditor.value === "string") {
+        if (typeof this.codeEditor.value === "string") {
             return this.codeEditor.value;
         }
         return "";
@@ -118,44 +130,41 @@ class SessionController {
         setText(this.evaluationStatus, "Awaiting evaluator result...");
         setText(this.sessionStatus, "Session in progress.");
         this.resetVisibleCases("Running...");
-        this.appendDebug("$ run #" + this.runAttemptCount + " (" + this.problemId + ")");
+        this.appendDebug(`$ run #${this.runAttemptCount} (${this.problemId})`);
         this.appendDebug("> executing code against deterministic toy tensors...");
         setText(this.scheduleStatus, "Scheduling status: waiting for submission.");
         try {
-            var runtimeResult = await this.api.runRuntime(this.problemId, this.readEditorCode());
-            var runtimePayload = runtimeResult.payload || {};
+            const runtimeResult = await this.api.runRuntime(this.problemId, this.readEditorCode());
+            const runtimePayload = runtimeResult.payload;
             if (!runtimeResult.ok) {
                 setText(this.runStatus, "Run unavailable right now. Please try again.");
                 setText(this.evaluationStatus, "Evaluation skipped.");
                 this.resetVisibleCases("Run unavailable");
-                this.appendDebug("! runtime unavailable: " + runtimeResult.status);
+                this.appendDebug(`! runtime unavailable: ${runtimeResult.status}`);
                 return;
             }
-            if (runtimePayload.status !== "success") {
+            if (!isRuntimeSuccessPayload(runtimePayload)) {
                 setText(this.runStatus, runtimePayload.message || "Run needs one more iteration.");
                 setText(this.evaluationStatus, "Evaluation skipped until run succeeds.");
                 this.resetVisibleCases("Run failed");
                 if (Array.isArray(runtimePayload.preloadedPackages)) {
-                    this.appendDebug("> preloaded packages: " + runtimePayload.preloadedPackages.join(", "));
+                    this.appendDebug(`> preloaded packages: ${runtimePayload.preloadedPackages.join(", ")}`);
                 }
                 if (typeof runtimePayload.runtimeStdout === "string" &&
                     runtimePayload.runtimeStdout.trim().length > 0) {
                     this.appendDebug("> stdout:");
                     this.appendDebug(runtimePayload.runtimeStdout.trimEnd());
                 }
-                this.appendDebug("! runtime failure: " +
-                    (runtimePayload.errorCode || "RUNTIME_FAILURE") +
-                    " - " +
-                    (runtimePayload.message || "Run failed."));
+                this.appendDebug(`! runtime failure: ${runtimePayload.errorCode || "RUNTIME_FAILURE"} - ${runtimePayload.message || "Run failed."}`);
                 if (Array.isArray(runtimePayload.actionableSteps)) {
-                    this.appendDebug("> next steps: " + runtimePayload.actionableSteps.join(" | "));
+                    this.appendDebug(`> next steps: ${runtimePayload.actionableSteps.join(" | ")}`);
                 }
                 return;
             }
             setText(this.runStatus, runtimePayload.message || "Run complete.");
-            this.appendDebug("> runtime success: " + (runtimePayload.message || "Run complete."));
+            this.appendDebug(`> runtime success: ${runtimePayload.message || "Run complete."}`);
             if (Array.isArray(runtimePayload.preloadedPackages)) {
-                this.appendDebug("> preloaded packages: " + runtimePayload.preloadedPackages.join(", "));
+                this.appendDebug(`> preloaded packages: ${runtimePayload.preloadedPackages.join(", ")}`);
             }
             if (typeof runtimePayload.runtimeStdout === "string" &&
                 runtimePayload.runtimeStdout.trim().length > 0) {
@@ -165,22 +174,16 @@ class SessionController {
             this.appendDebug("> output:");
             this.appendDebug(this.formatValueForDebug(runtimePayload.output));
             this.applyVisibleCaseResults(runtimePayload.testCaseResults);
-            var evaluatorResult = await this.api.evaluateOutput(this.problemId, runtimePayload.output);
-            var evaluatorPayload = evaluatorResult.payload || {};
+            const evaluatorResult = await this.api.evaluateOutput(this.problemId, runtimePayload.output);
+            const evaluatorPayload = evaluatorResult.payload;
             if (!evaluatorResult.ok) {
                 setText(this.evaluationStatus, "Evaluator unavailable right now.");
-                this.appendDebug("! evaluator unavailable: " + evaluatorResult.status);
+                this.appendDebug(`! evaluator unavailable: ${evaluatorResult.status}`);
                 return;
             }
             this.lastEvaluation = evaluatorPayload;
-            setText(this.evaluationStatus, "Evaluation: " +
-                evaluatorPayload.correctness +
-                " - " +
-                evaluatorPayload.explanation);
-            this.appendDebug("> evaluator: " +
-                evaluatorPayload.correctness +
-                " - " +
-                evaluatorPayload.explanation);
+            setText(this.evaluationStatus, `Evaluation: ${evaluatorPayload.correctness} - ${evaluatorPayload.explanation}`);
+            this.appendDebug(`> evaluator: ${evaluatorPayload.correctness} - ${evaluatorPayload.explanation}`);
         }
         catch (error) {
             setText(this.runStatus, "Run encountered a temporary issue. You can still submit this session.");
@@ -198,12 +201,31 @@ class SessionController {
         if (!this.runButton) {
             return;
         }
-        this.runButton.addEventListener("click", function () {
+        this.runButton.addEventListener("click", () => {
             return this.runCurrentCode();
-        }.bind(this));
+        });
     }
 }
-class SubmissionController {
+export class SubmissionController {
+    problemId;
+    submitButton;
+    sessionStatus;
+    scheduleStatus;
+    sessionTimerStatus;
+    timerCapMessage;
+    api;
+    appendDebugLine;
+    readLocalProgress;
+    persistAnonymousProgress;
+    getPriorSuccessfulCompletions;
+    getDaysSinceLastExposure;
+    getSessionTimeSpentMinutes;
+    getHintTierUsed;
+    getSessionId;
+    getLastEvaluation;
+    stopSessionTimer;
+    sessionSubmitted = false;
+    submissionInProgress = false;
     constructor(options) {
         this.problemId = options.problemId;
         this.submitButton = options.submitButton;
@@ -222,8 +244,6 @@ class SubmissionController {
         this.getSessionId = options.getSessionId;
         this.getLastEvaluation = options.getLastEvaluation;
         this.stopSessionTimer = options.stopSessionTimer;
-        this.sessionSubmitted = false;
-        this.submissionInProgress = false;
     }
     isValidCorrectness(value) {
         return value === "pass" || value === "partial" || value === "fail";
@@ -250,23 +270,19 @@ class SubmissionController {
     async updateSchedulerDecision(correctness, priorProgress) {
         setText(this.scheduleStatus, "Scheduling status: computing next resurfacing window...");
         try {
-            var schedulerResult = await this.api.requestSchedulerDecision({
-                correctness: correctness,
+            const schedulerResult = await this.api.requestSchedulerDecision({
+                correctness,
                 timeSpentMinutes: this.getSessionTimeSpentMinutes(),
                 hintTierUsed: this.getHintTierUsed(),
                 priorSuccessfulCompletions: this.getPriorSuccessfulCompletions(priorProgress),
                 daysSinceLastExposure: this.getDaysSinceLastExposure(priorProgress)
             });
-            var schedulerPayload = schedulerResult.payload || {};
+            const schedulerPayload = schedulerResult.payload;
             if (!schedulerResult.ok) {
                 setText(this.scheduleStatus, "Scheduling status: unavailable right now. A next problem will still be ready.");
                 return;
             }
-            setText(this.scheduleStatus, "Scheduling status: next resurfacing in " +
-                schedulerPayload.nextIntervalDays +
-                " day(s), priority " +
-                schedulerPayload.resurfacingPriority +
-                ".");
+            setText(this.scheduleStatus, `Scheduling status: next resurfacing in ${schedulerPayload.nextIntervalDays} day(s), priority ${schedulerPayload.resurfacingPriority}.`);
         }
         catch (error) {
             setText(this.scheduleStatus, "Scheduling status: temporarily unavailable. Your session is still complete.");
@@ -280,25 +296,25 @@ class SubmissionController {
         if (this.submitButton) {
             this.submitButton.disabled = true;
         }
-        var lastEvaluation = this.getLastEvaluation();
-        var correctness = lastEvaluation && this.isValidCorrectness(lastEvaluation.correctness)
+        const lastEvaluation = this.getLastEvaluation();
+        const correctness = lastEvaluation && this.isValidCorrectness(lastEvaluation.correctness)
             ? lastEvaluation.correctness
             : "fail";
-        var explanation = lastEvaluation && typeof lastEvaluation.explanation === "string"
+        const explanation = lastEvaluation && typeof lastEvaluation.explanation === "string"
             ? lastEvaluation.explanation
             : "Submitted without a completed successful run.";
-        var priorProgress = this.readLocalProgress();
+        const priorProgress = this.readLocalProgress();
         setText(this.sessionStatus, "Submitting session...");
-        this.appendDebug("$ submit (" + this.problemId + ")");
+        this.appendDebug(`$ submit (${this.problemId})`);
         setText(this.scheduleStatus, "Scheduling status: preparing scheduler decision...");
         try {
-            var submitResult = await this.api.submitSession({
+            const submitResult = await this.api.submitSession({
                 sessionId: this.getSessionId(),
                 problemId: this.problemId,
-                correctness: correctness,
-                explanation: explanation
+                correctness,
+                explanation
             });
-            var submitPayload = submitResult.payload || {};
+            const submitPayload = submitResult.payload;
             if (!submitResult.ok) {
                 setText(this.sessionStatus, "Submission temporarily unavailable. Please retry.");
                 if (submitSource === "timer-cap") {
@@ -310,19 +326,13 @@ class SubmissionController {
             if (typeof this.stopSessionTimer === "function") {
                 this.stopSessionTimer();
             }
-            setText(this.sessionStatus, "Session status: " +
-                submitPayload.nextState.status +
-                ". " +
-                submitPayload.supportiveFeedback);
+            setText(this.sessionStatus, `Session status: ${submitPayload.nextState.status}. ${submitPayload.supportiveFeedback}`);
             setText(this.sessionTimerStatus, "Session timer: completed.");
             if (submitSource === "timer-cap") {
                 setText(this.timerCapMessage, "30-minute cap reached. Your session was submitted automatically.");
             }
-            this.appendDebug("> submit accepted: " +
-                submitPayload.nextState.status +
-                " - " +
-                submitPayload.supportiveFeedback);
-            var updatedProgress = this.persistAnonymousProgress(correctness);
+            this.appendDebug(`> submit accepted: ${submitPayload.nextState.status} - ${submitPayload.supportiveFeedback}`);
+            const updatedProgress = this.persistAnonymousProgress(correctness);
             await this.syncAnonymousProgress(updatedProgress);
             await this.updateSchedulerDecision(correctness, priorProgress);
         }
@@ -343,9 +353,8 @@ class SubmissionController {
         if (!this.submitButton) {
             return;
         }
-        this.submitButton.addEventListener("click", function () {
+        this.submitButton.addEventListener("click", () => {
             return this.submitSession("manual");
-        }.bind(this));
+        });
     }
 }
-export { createWorkspaceApiAdapters, SessionController, SubmissionController };

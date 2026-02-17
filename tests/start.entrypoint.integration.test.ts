@@ -157,7 +157,8 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(sharedControllerResponse.headers.get("content-type")?.includes("javascript"), true)
   const sharedControllerText = await sharedControllerResponse.text()
   assert.equal(sharedControllerText.includes("function setClassFlag"), true)
-  assert.equal(sharedControllerText.includes("export { setText"), true)
+  assert.equal(sharedControllerText.includes("export function setText"), true)
+  assert.equal(sharedControllerText.includes("setText"), true)
   assert.equal(sharedControllerText.includes("setClassFlag"), true)
 
   const editorControllerResponse = await fetch(`${base}/static/problem-workspace-client-editor-controller.js`)

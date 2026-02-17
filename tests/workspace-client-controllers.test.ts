@@ -119,7 +119,7 @@ function loadControllerClasses() {
       QuestionCatalog,
       VisibleTestCaseTracker,
       SuggestTopicFormValidator
-    } as {
+    } as unknown as {
       QuestionCatalog: new (options: {
         rawCatalog?: string
         problemId?: string
@@ -136,7 +136,7 @@ function loadControllerClasses() {
       SessionController,
       SubmissionController,
       SuggestTopicController
-    } as {
+    } as unknown as {
       createWorkspaceApiAdapters: (options: {
         fetchImpl?: (
           input: string | URL | Request,
