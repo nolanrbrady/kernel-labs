@@ -970,6 +970,14 @@ textarea.code-editor {
 }
 
 .question-library-item {
+  padding: 0;
+  background: transparent;
+  border-radius: var(--radius-md);
+}
+
+.question-library-item-link {
+  display: grid;
+  gap: 0.45rem;
   padding: 1.25rem 1.5rem;
   background: var(--bg-surface);
   border-radius: var(--radius-md);
@@ -978,28 +986,52 @@ textarea.code-editor {
   line-height: 1.6;
   font-size: 0.88rem;
   color: var(--text-secondary);
+  text-decoration: none;
 }
 
-.question-library-item:hover {
+.question-library-item-link:hover {
   border-color: var(--border-medium);
   background: var(--bg-surface-hover);
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
 
+.question-library-item-link.is-active {
+  border-color: var(--green-border);
+  background: var(--green-bg);
+}
+
 .question-library-item-title {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
   font-family: var(--font-sans);
   font-size: 1rem;
   font-weight: 600;
-  margin-bottom: 0.4rem;
   color: var(--text-primary);
 }
 
 .question-library-item-meta {
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   color: var(--text-muted);
   font-family: var(--font-mono);
+}
+
+.question-library-item-summary {
+  color: var(--text-secondary);
+}
+
+.question-library-item-active-tag {
+  border: 1px solid var(--green-border);
+  background: var(--green-bg);
+  color: var(--green-soft);
+  border-radius: var(--radius-full);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.48rem;
+  line-height: 1.35;
 }
 
 /* ─── Suggest Topic Modal ─── */

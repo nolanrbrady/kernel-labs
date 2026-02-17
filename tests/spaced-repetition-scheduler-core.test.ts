@@ -67,3 +67,45 @@ test("new problems are prioritized over resurfaced candidates without debt accum
   assert.equal(rankedSession.prioritizedNewProblem, true)
   assert.equal(rankedSession.resurfacingDebtCount, 0)
 })
+
+test("scheduler groups interchangeable resurfaced candidates within threshold boundaries", () => {
+  const rankedSession = rankSessionCandidates({
+    newProblemIds: [],
+    resurfacedCandidates: [
+      { problemId: "outside_threshold", resurfacingPriority: 0.84 },
+      { problemId: "boundary_match", resurfacingPriority: 0.85 },
+      { problemId: "top_card", resurfacingPriority: 0.9 }
+    ],
+    interchangeableThreshold: 0.05
+  })
+
+  assert.equal(rankedSession.primaryProblemId, "top_card")
+  assert.equal(rankedSession.interchangeableThreshold, 0.05)
+  assert.deepEqual(rankedSession.interchangeableResurfacedProblemIds, [
+    "top_card",
+    "boundary_match"
+  ])
+})
+
+test("scheduler rank ordering is deterministic on priority ties", () => {
+  const rankedSession = rankSessionCandidates({
+    newProblemIds: [],
+    resurfacedCandidates: [
+      { problemId: "z_problem", resurfacingPriority: 0.9 },
+      { problemId: "a_problem", resurfacingPriority: 0.9 },
+      { problemId: "m_problem", resurfacingPriority: 0.88 }
+    ],
+    interchangeableThreshold: 0.01
+  })
+
+  assert.equal(rankedSession.primaryProblemId, "a_problem")
+  assert.deepEqual(rankedSession.rankedResurfacedProblemIds, [
+    "a_problem",
+    "z_problem",
+    "m_problem"
+  ])
+  assert.deepEqual(rankedSession.interchangeableResurfacedProblemIds, [
+    "a_problem",
+    "z_problem"
+  ])
+})

@@ -213,6 +213,34 @@ export function initializeProblemWorkspaceClient(): void {
     }
   }
 
+  function navigateToProblem(problemPath: string): void {
+    if (typeof problemPath !== "string" || problemPath.length === 0) {
+      return
+    }
+
+    const globalLocation = (
+      globalThis as {
+        location?: {
+          assign?: (path: string) => void
+          href?: string
+        }
+      }
+    ).location
+
+    if (!globalLocation) {
+      return
+    }
+
+    if (typeof globalLocation.assign === "function") {
+      globalLocation.assign(problemPath)
+      return
+    }
+
+    if (typeof globalLocation.href === "string") {
+      globalLocation.href = problemPath
+    }
+  }
+
   // ─── UI Controllers ───
 
   const editorController = new EditorController({
@@ -239,7 +267,8 @@ export function initializeProblemWorkspaceClient(): void {
     questionSearchInput,
     questionTypeFilter,
     questionLibraryResults,
-    questionLibraryCount
+    questionLibraryCount,
+    navigateToProblem
   })
   const suggestTopicController = new SuggestTopicController({
     validator: suggestTopicValidator,

@@ -139,6 +139,15 @@ export class QuestionCatalog {
             Number.isFinite(entry.estimatedMinutes)
               ? entry.estimatedMinutes
               : 30
+          const schedulerWeight =
+            typeof entry.schedulerWeight === "number" &&
+            Number.isFinite(entry.schedulerWeight)
+              ? entry.schedulerWeight
+              : undefined
+          const problemPath =
+            typeof entry.problemPath === "string" && entry.problemPath.length > 0
+              ? entry.problemPath
+              : undefined
 
           if (!id || !title) {
             return null
@@ -149,7 +158,9 @@ export class QuestionCatalog {
             title,
             problemType,
             summary,
-            estimatedMinutes: Math.max(1, Math.round(estimatedMinutes))
+            estimatedMinutes: Math.max(1, Math.round(estimatedMinutes)),
+            schedulerWeight,
+            problemPath
           }
         })
         .filter((entry): entry is QuestionCatalogEntry => entry !== null)
@@ -259,10 +270,24 @@ export class QuestionCatalog {
   renderQuestionListHtml(questions: QuestionCatalogEntry[]): string {
     return questions
       .map((question) => {
+        const isActiveQuestion = question.id === this.problemId
+        const escapedId = encodeURIComponent(question.id)
+        const questionPath =
+          typeof question.problemPath === "string" && question.problemPath.length > 0
+            ? question.problemPath
+            : `/?problemId=${escapedId}`
         return (
           '<li class="question-library-item">' +
+          '<a class="question-library-item-link' +
+          (isActiveQuestion ? " is-active" : "") +
+          '" href="' +
+          escapeHtml(questionPath) +
+          '">' +
           '<span class="question-library-item-title">' +
           escapeHtml(question.title) +
+          (isActiveQuestion
+            ? '<span class="question-library-item-active-tag">Active</span>'
+            : "") +
           "</span> " +
           '<span class="question-library-item-meta">[' +
           escapeHtml(question.problemType) +
@@ -271,8 +296,10 @@ export class QuestionCatalog {
           " - " +
           question.estimatedMinutes +
           "m</span>" +
-          "<br />" +
+          '<span class="question-library-item-summary">' +
           escapeHtml(question.summary) +
+          "</span>" +
+          "</a>" +
           "</li>"
         )
       })

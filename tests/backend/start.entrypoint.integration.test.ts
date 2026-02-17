@@ -122,9 +122,18 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(rootHtml.includes("suggest-topic-output-spec"), true)
   assert.equal(rootHtml.includes("suggest-topic-starter-signature"), true)
   assert.equal(rootHtml.includes("Submit Topic"), true)
-  assert.equal(rootHtml.includes("Showing 11 of 11 questions."), true)
+  assert.equal(rootHtml.includes("Showing 3 of 3 questions."), true)
   assert.equal(rootHtml.includes("Implement LayerNorm Forward Pass"), true)
-  assert.equal(rootHtml.includes("conditioning_film_affine_shift_scale_v1"), true)
+  assert.equal(rootHtml.includes("mlp_affine_relu_step_v1"), true)
+  assert.equal(rootHtml.includes("conditioning_film_affine_shift_scale_v1"), false)
+  assert.equal(
+    rootHtml.includes("question-library-item-link is-active"),
+    true
+  )
+  assert.equal(
+    rootHtml.includes("/?problemId=mlp_affine_relu_step_v1"),
+    true
+  )
 
   // Static CSS is served with correct content-type and contains theme rules
   const cssResponse = await fetch(
@@ -218,4 +227,23 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(topicControllerResponse.headers.get("content-type")?.includes("javascript"), true)
   const topicControllerText = await topicControllerResponse.text()
   assert.equal(topicControllerText.includes("class SuggestTopicController"), true)
+})
+
+test("workspace route query switches the active problem card and payload", async (t) => {
+  const startedServer = await startServer({ port: 0 })
+  const base = `http://127.0.0.1:${startedServer.port}`
+
+  t.after(async () => {
+    await startedServer.close()
+  })
+
+  const rootResponse = await fetch(`${base}/?problemId=mlp_affine_relu_step_v1`)
+  const rootHtml = await rootResponse.text()
+
+  assert.equal(rootResponse.status, 200)
+  assert.equal(rootHtml.includes("data-problem-id=\"mlp_affine_relu_step_v1\""), true)
+  assert.equal(rootHtml.includes("Implement a Single MLP Affine + ReLU Step"), true)
+  assert.equal(rootHtml.includes("question-library-item-link is-active"), true)
+  assert.equal(rootHtml.includes("Active</span>"), true)
+  assert.equal(rootHtml.includes("Showing 3 of 3 questions."), true)
 })

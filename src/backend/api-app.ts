@@ -47,28 +47,167 @@ const staticAssetVersion =
   process.env.STATIC_ASSET_VERSION ??
   String(Math.floor(Date.now() / 1000))
 
-const DEFAULT_QUESTION_LIBRARY: QuestionLibraryItem[] = [
-  {
-    id: "attention_scaled_dot_product_v1",
-    title: "Implement Scaled Dot-Product Attention",
-    problemType: "Attention",
-    summary:
-      "Compute query-key scores, apply mask handling, and return weighted values on toy tensors.",
-    estimatedMinutes: 30
-  },
-  ...getSeedProblemPackV1().map((problem) => {
-    return {
-      id: problem.id,
-      title: problem.title,
-      problemType: problem.category,
-      summary: problem.learning_context,
-      estimatedMinutes: problem.estimated_time_minutes
-    }
+const DEFAULT_WORKSPACE_PROBLEM_ID = "attention_scaled_dot_product_v1"
+const DEFAULT_INTERCHANGEABLE_THRESHOLD = 0.03
+const INTERCHANGEABLE_WEIGHT_EPSILON = 1e-9
+const SEED_PROBLEM_WEIGHT_STEP = 0.012
+const SEED_PROBLEM_WEIGHT_BASE = 0.94
+const DEFAULT_WORKSPACE_PROBLEM_WEIGHT = 0.955
+
+const SEED_PROBLEM_PACK = getSeedProblemPackV1()
+const SEED_PROBLEM_BY_ID = new Map(
+  SEED_PROBLEM_PACK.map((problem) => {
+    return [problem.id, problem]
   })
-]
+)
+
+function parseInterchangeableThreshold(rawValue: string | undefined): number {
+  if (typeof rawValue !== "string" || rawValue.trim().length === 0) {
+    return DEFAULT_INTERCHANGEABLE_THRESHOLD
+  }
+
+  const parsedValue = Number(rawValue)
+  if (Number.isFinite(parsedValue) === false || parsedValue < 0) {
+    return DEFAULT_INTERCHANGEABLE_THRESHOLD
+  }
+
+  return parsedValue
+}
+
+function buildInterchangeableQuestionLibrary(options: {
+  questionCatalog: QuestionLibraryItem[]
+  interchangeableThreshold: number
+}): QuestionLibraryItem[] {
+  const sortedCatalog = [...options.questionCatalog].sort((left, right) => {
+    const leftWeight =
+      typeof left.schedulerWeight === "number" && Number.isFinite(left.schedulerWeight)
+        ? left.schedulerWeight
+        : Number.NEGATIVE_INFINITY
+    const rightWeight =
+      typeof right.schedulerWeight === "number" && Number.isFinite(right.schedulerWeight)
+        ? right.schedulerWeight
+        : Number.NEGATIVE_INFINITY
+
+    if (rightWeight !== leftWeight) {
+      return rightWeight - leftWeight
+    }
+
+    return left.title.localeCompare(right.title)
+  })
+  const topWeight =
+    typeof sortedCatalog[0]?.schedulerWeight === "number" &&
+    Number.isFinite(sortedCatalog[0].schedulerWeight)
+      ? sortedCatalog[0].schedulerWeight
+      : Number.NEGATIVE_INFINITY
+
+  return sortedCatalog.filter((question) => {
+    if (
+      typeof question.schedulerWeight !== "number" ||
+      Number.isFinite(question.schedulerWeight) === false
+    ) {
+      return false
+    }
+
+    return (
+      topWeight - question.schedulerWeight <=
+      options.interchangeableThreshold + INTERCHANGEABLE_WEIGHT_EPSILON
+    )
+  })
+}
+
+function buildDefaultQuestionLibrary(): QuestionLibraryItem[] {
+  return [
+    {
+      id: DEFAULT_WORKSPACE_PROBLEM_ID,
+      title: "Implement Scaled Dot-Product Attention",
+      problemType: "Attention",
+      summary:
+        "Compute query-key scores, apply mask handling, and return weighted values on toy tensors.",
+      estimatedMinutes: 30,
+      schedulerWeight: DEFAULT_WORKSPACE_PROBLEM_WEIGHT,
+      problemPath: `/?problemId=${encodeURIComponent(DEFAULT_WORKSPACE_PROBLEM_ID)}`
+    },
+    ...SEED_PROBLEM_PACK.map((problem, index) => {
+      return {
+        id: problem.id,
+        title: problem.title,
+        problemType: problem.category,
+        summary: problem.learning_context,
+        estimatedMinutes: problem.estimated_time_minutes,
+        schedulerWeight: Number(
+          (SEED_PROBLEM_WEIGHT_BASE - index * SEED_PROBLEM_WEIGHT_STEP).toFixed(6)
+        ),
+        problemPath: `/?problemId=${encodeURIComponent(problem.id)}`
+      }
+    })
+  ]
+}
+
+const QUESTION_LIBRARY_INTERCHANGEABLE_THRESHOLD = parseInterchangeableThreshold(
+  process.env.QUESTION_BANK_INTERCHANGEABLE_THRESHOLD
+)
+const FULL_QUESTION_LIBRARY = buildDefaultQuestionLibrary()
+const DEFAULT_QUESTION_LIBRARY = buildInterchangeableQuestionLibrary({
+  questionCatalog: FULL_QUESTION_LIBRARY,
+  interchangeableThreshold: QUESTION_LIBRARY_INTERCHANGEABLE_THRESHOLD
+})
+
+function buildSeedWorkspaceProblem(problemId: string): WorkspaceProblem | null {
+  const seedProblem = SEED_PROBLEM_BY_ID.get(problemId)
+  if (!seedProblem) {
+    return null
+  }
+
+  return {
+    id: seedProblem.id,
+    title: seedProblem.title,
+    category: seedProblem.category,
+    goal: seedProblem.goal,
+    conceptDescription: seedProblem.concept_description,
+    inputSpecification: [
+      ...seedProblem.inputs.tensor_shapes,
+      ...seedProblem.inputs.constraints
+    ].join(" | "),
+    expectedOutputSpecification: [
+      `Expected shape: ${seedProblem.expected_output.shape}`,
+      ...seedProblem.expected_output.numerical_properties
+    ].join(" | "),
+    formulaNotes: [
+      "\\text{Implement the core forward pass for this primitive.}",
+      "\\text{Respect the provided tensor shapes and constraints.}",
+      "\\text{Return finite deterministic outputs for toy tensors.}"
+    ],
+    architectureUses: [seedProblem.learning_context],
+    evaluationChecklist: seedProblem.evaluation_logic.checks,
+    visibleTestCases: [
+      {
+        id: `${seedProblem.id}_case_1`,
+        name: "Case 1 - Shape Contract",
+        inputSummary: seedProblem.inputs.tensor_shapes.join(", "),
+        expectedOutputSummary: `Output shape ${seedProblem.expected_output.shape}.`
+      },
+      {
+        id: `${seedProblem.id}_case_2`,
+        name: "Case 2 - Deterministic Sanity",
+        inputSummary: `Datatype(s): ${seedProblem.inputs.datatypes.join(", ")}.`,
+        expectedOutputSummary: seedProblem.expected_output.numerical_properties.join("; ")
+      }
+    ],
+    paperLinks: seedProblem.resources.map((resource) => {
+      return {
+        title: resource.title,
+        url: resource.url
+      }
+    }),
+    hints: seedProblem.hints,
+    questionCatalog: DEFAULT_QUESTION_LIBRARY,
+    interchangeableThreshold: QUESTION_LIBRARY_INTERCHANGEABLE_THRESHOLD,
+    starterCode: seedProblem.starter_code
+  }
+}
 
 const DEFAULT_WORKSPACE_PROBLEM: WorkspaceProblem = {
-  id: "attention_scaled_dot_product_v1",
+  id: DEFAULT_WORKSPACE_PROBLEM_ID,
   title: "Implement Scaled Dot-Product Attention",
   category: "Attention",
   goal: "Compute scaled dot-product attention on deterministic toy tensors with optional additive masking (single-sequence 2D simplification).",
@@ -134,8 +273,18 @@ const DEFAULT_WORKSPACE_PROBLEM: WorkspaceProblem = {
     }
   ],
   questionCatalog: DEFAULT_QUESTION_LIBRARY,
+  interchangeableThreshold: QUESTION_LIBRARY_INTERCHANGEABLE_THRESHOLD,
   starterCode:
     "import numpy as np\n\n\ndef scaled_dot_product_attention(q, k, v, mask=None):\n    \"\"\"Scaled dot-product attention (2D toy formulation).\n\n    Shapes:\n      q, k, v: [seq_len, d_k]\n      mask (optional): [seq_len, seq_len] additive bias applied before softmax\n\n    Returns:\n      context: [seq_len, d_k]\n    \"\"\"\n    # TODO: implement attention core\n    pass"
+}
+
+function resolveWorkspaceProblem(problemId: string | null): WorkspaceProblem {
+  if (!problemId || problemId === DEFAULT_WORKSPACE_PROBLEM_ID) {
+    return DEFAULT_WORKSPACE_PROBLEM
+  }
+
+  const mappedSeedProblem = buildSeedWorkspaceProblem(problemId)
+  return mappedSeedProblem ?? DEFAULT_WORKSPACE_PROBLEM
 }
 
 const anonymousProgressStore = createFileAnonymousProgressStore({
@@ -193,8 +342,13 @@ export function createApiApp(): Express {
     immutable: false
   }))
 
-  app.get("/", (_request: Request, response: Response) => {
-    const route = createEditorFirstLandingRoute(DEFAULT_WORKSPACE_PROBLEM)
+  app.get("/", (request: Request, response: Response) => {
+    const rawProblemId = request.query.problemId
+    const problemId =
+      typeof rawProblemId === "string" && rawProblemId.length > 0
+        ? rawProblemId
+        : null
+    const route = createEditorFirstLandingRoute(resolveWorkspaceProblem(problemId))
     const markup = renderToStaticMarkup(
       createElement(ProblemWorkspaceScreen, { route })
     )
@@ -516,16 +670,20 @@ export function createApiApp(): Express {
     const rawBody = request.body as {
       newProblemIds?: unknown
       resurfacedCandidates?: unknown
+      interchangeableThreshold?: unknown
     }
 
     if (
       !Array.isArray(rawBody.newProblemIds) ||
-      !Array.isArray(rawBody.resurfacedCandidates)
+      !Array.isArray(rawBody.resurfacedCandidates) ||
+      (typeof rawBody.interchangeableThreshold !== "undefined" &&
+        typeof rawBody.interchangeableThreshold !== "number")
     ) {
       response.status(400).json({
         status: "failure",
         errorCode: "INVALID_REQUEST",
-        message: "Scheduler rank requires newProblemIds and resurfacedCandidates arrays."
+        message:
+          "Scheduler rank requires newProblemIds/resurfacedCandidates arrays and optional numeric interchangeableThreshold."
       })
       return
     }
@@ -536,7 +694,10 @@ export function createApiApp(): Express {
         resurfacedCandidates: rawBody.resurfacedCandidates as Array<{
           problemId: string
           resurfacingPriority: number
-        }>
+        }>,
+        interchangeableThreshold: rawBody.interchangeableThreshold as
+          | number
+          | undefined
       })
     )
   })
@@ -545,16 +706,24 @@ export function createApiApp(): Express {
     const rawBody = request.body as {
       newProblemIds?: unknown
       resurfacedCandidates?: unknown
+      interchangeableThreshold?: unknown
+      selectedProblemId?: unknown
     }
 
     if (
       !Array.isArray(rawBody.newProblemIds) ||
-      !Array.isArray(rawBody.resurfacedCandidates)
+      !Array.isArray(rawBody.resurfacedCandidates) ||
+      (typeof rawBody.interchangeableThreshold !== "undefined" &&
+        typeof rawBody.interchangeableThreshold !== "number") ||
+      (typeof rawBody.selectedProblemId !== "undefined" &&
+        rawBody.selectedProblemId !== null &&
+        typeof rawBody.selectedProblemId !== "string")
     ) {
       response.status(400).json({
         status: "failure",
         errorCode: "INVALID_REQUEST",
-        message: "Scheduler plan requires newProblemIds and resurfacedCandidates arrays."
+        message:
+          "Scheduler plan requires newProblemIds/resurfacedCandidates arrays, optional numeric interchangeableThreshold, and optional selectedProblemId string."
       })
       return
     }
@@ -565,7 +734,11 @@ export function createApiApp(): Express {
         resurfacedCandidates: rawBody.resurfacedCandidates as Array<{
           problemId: string
           resurfacingPriority: number
-        }>
+        }>,
+        interchangeableThreshold: rawBody.interchangeableThreshold as
+          | number
+          | undefined,
+        selectedProblemId: rawBody.selectedProblemId as string | null | undefined
       })
     )
   })

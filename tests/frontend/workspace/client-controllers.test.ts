@@ -201,6 +201,7 @@ function loadControllerClasses() {
         questionTypeFilter: FakeElement
         questionLibraryResults: FakeElement
         questionLibraryCount: FakeElement
+        navigateToProblem?: (problemPath: string) => void
       }) => {
         bind: () => void
         render: () => void
@@ -642,13 +643,17 @@ test("question library controller renders filtered catalog results", async () =>
   const questionTypeFilter = createFakeElement("", "all")
   const questionLibraryResults = createFakeElement()
   const questionLibraryCount = createFakeElement("Showing 2 of 2 questions.")
+  let selectedProblemPath = ""
 
   const controller = new controllers.QuestionLibraryController({
     catalogModel,
     questionSearchInput,
     questionTypeFilter,
     questionLibraryResults,
-    questionLibraryCount
+    questionLibraryCount,
+    navigateToProblem(problemPath: string) {
+      selectedProblemPath = problemPath
+    }
   })
 
   controller.bind()
@@ -661,6 +666,36 @@ test("question library controller renders filtered catalog results", async () =>
   assert.equal(
     questionLibraryResults.innerHTML.includes("Scaled Dot-Product Attention Core"),
     true
+  )
+
+  let prevented = false
+  await questionLibraryResults.handlers.get("click")?.({
+    preventDefault() {
+      prevented = true
+    },
+    target: {
+      closest(selector: string) {
+        if (selector !== ".question-library-item-link") {
+          return null
+        }
+
+        return {
+          getAttribute(name: string) {
+            if (name !== "href") {
+              return null
+            }
+
+            return "/?problemId=attention_scaled_dot_product_core_v1"
+          }
+        }
+      }
+    }
+  })
+
+  assert.equal(prevented, true)
+  assert.equal(
+    selectedProblemPath,
+    "/?problemId=attention_scaled_dot_product_core_v1"
   )
 })
 

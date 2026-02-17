@@ -7,12 +7,15 @@ export type QuestionLibraryItem = {
   problemType: string
   summary: string
   estimatedMinutes: number
+  schedulerWeight?: number
+  problemPath?: string
 }
 
 export type WorkspaceProblem = {
   id: string
   title: string
   starterCode: string
+  interchangeableThreshold?: number
   category?: string
   goal?: string
   conceptDescription?: string
@@ -82,6 +85,68 @@ function toStableCaseId(value: string): string {
     .trim()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
+}
+
+const INTERCHANGEABLE_WEIGHT_EPSILON = 1e-9
+
+function filterInterchangeableQuestionCatalog(
+  questionCatalog: QuestionLibraryItem[],
+  threshold: number
+): QuestionLibraryItem[] {
+  if (questionCatalog.length === 0) {
+    return []
+  }
+
+  const hasSchedulerWeight = questionCatalog.some((question) => {
+    return (
+      typeof question.schedulerWeight === "number" &&
+      Number.isFinite(question.schedulerWeight)
+    )
+  })
+
+  if (!hasSchedulerWeight) {
+    return questionCatalog
+  }
+
+  const normalizedThreshold =
+    Number.isFinite(threshold) && threshold >= 0 ? threshold : 0.03
+  const sortedByWeight = [...questionCatalog].sort((left, right) => {
+    const leftWeight =
+      typeof left.schedulerWeight === "number" &&
+      Number.isFinite(left.schedulerWeight)
+        ? left.schedulerWeight
+        : Number.NEGATIVE_INFINITY
+    const rightWeight =
+      typeof right.schedulerWeight === "number" &&
+      Number.isFinite(right.schedulerWeight)
+        ? right.schedulerWeight
+        : Number.NEGATIVE_INFINITY
+
+    if (rightWeight !== leftWeight) {
+      return rightWeight - leftWeight
+    }
+
+    return left.title.localeCompare(right.title)
+  })
+  const topWeight =
+    typeof sortedByWeight[0]?.schedulerWeight === "number" &&
+    Number.isFinite(sortedByWeight[0].schedulerWeight)
+      ? sortedByWeight[0].schedulerWeight
+      : Number.NEGATIVE_INFINITY
+
+  return sortedByWeight.filter((question) => {
+    if (
+      typeof question.schedulerWeight !== "number" ||
+      Number.isFinite(question.schedulerWeight) === false
+    ) {
+      return false
+    }
+
+    return (
+      topWeight - question.schedulerWeight <=
+      normalizedThreshold + INTERCHANGEABLE_WEIGHT_EPSILON
+    )
+  })
 }
 
 export function ProblemWorkspaceScreen(props: {
@@ -156,7 +221,7 @@ export function ProblemWorkspaceScreen(props: {
   const problemGoal =
     route.problem.goal ??
     "Implement the core attention step with deterministic toy tensors and submit within this focused session."
-  const questionCatalog = route.problem.questionCatalog ?? [
+  const fullQuestionCatalog = route.problem.questionCatalog ?? [
     {
       id: route.problem.id,
       title: route.problem.title,
@@ -164,12 +229,24 @@ export function ProblemWorkspaceScreen(props: {
       summary:
         route.problem.conceptDescription ??
         "Atomic toy-tensor coding problem for focused practice.",
-      estimatedMinutes: 30
+      estimatedMinutes: 30,
+      schedulerWeight: 1,
+      problemPath: `/?problemId=${encodeURIComponent(route.problem.id)}`
     }
   ]
+  const interchangeableThreshold =
+    typeof route.problem.interchangeableThreshold === "number"
+      ? route.problem.interchangeableThreshold
+      : 0.03
+  const questionCatalog = filterInterchangeableQuestionCatalog(
+    fullQuestionCatalog,
+    interchangeableThreshold
+  )
+  const visibleQuestionCatalog =
+    questionCatalog.length > 0 ? questionCatalog : fullQuestionCatalog
   const questionTypeOptions = Array.from(
     new Set(
-      questionCatalog.map((question) => {
+      visibleQuestionCatalog.map((question) => {
         return question.problemType
       })
     )
@@ -201,7 +278,7 @@ export function ProblemWorkspaceScreen(props: {
       data-hint-tier-1={problemHints.tier1}
       data-hint-tier-2={problemHints.tier2}
       data-hint-tier-3={problemHints.tier3}
-      data-question-catalog={JSON.stringify(questionCatalog)}
+      data-question-catalog={JSON.stringify(visibleQuestionCatalog)}
       data-visible-test-case-ids={JSON.stringify(
         normalizedVisibleTestCases.map((testCase) => {
           return testCase.id
@@ -395,7 +472,7 @@ export function ProblemWorkspaceScreen(props: {
               <header className="question-library-header">
                 <h2>Question Library</h2>
                 <p className="question-library-count" id="question-library-count">
-                  Showing {questionCatalog.length} of {questionCatalog.length} questions.
+                  Showing {visibleQuestionCatalog.length} of {visibleQuestionCatalog.length} questions.
                 </p>
               </header>
               <div className="question-library-controls">
@@ -582,15 +659,30 @@ export function ProblemWorkspaceScreen(props: {
                 </div>
               </section>
               <ul className="question-library-results" id="question-library-results">
-                {questionCatalog.map((question) => {
+                {visibleQuestionCatalog.map((question) => {
+                  const isActiveQuestion = question.id === route.problem.id
+                  const questionPath =
+                    question.problemPath ??
+                    `/?problemId=${encodeURIComponent(question.id)}`
                   return (
                     <li key={question.id} className="question-library-item">
-                      <span className="question-library-item-title">{question.title}</span>{" "}
-                      <span className="question-library-item-meta">
-                        [{question.problemType}] {question.id} - {question.estimatedMinutes}m
-                      </span>
-                      <br />
-                      {question.summary}
+                      <a
+                        className={`question-library-item-link${isActiveQuestion ? " is-active" : ""}`}
+                        href={questionPath}
+                      >
+                        <span className="question-library-item-title">
+                          {question.title}
+                          {isActiveQuestion ? (
+                            <span className="question-library-item-active-tag">Active</span>
+                          ) : null}
+                        </span>
+                        <span className="question-library-item-meta">
+                          [{question.problemType}] {question.id} - {question.estimatedMinutes}m
+                        </span>
+                        <span className="question-library-item-summary">
+                          {question.summary}
+                        </span>
+                      </a>
                     </li>
                   )
                 })}

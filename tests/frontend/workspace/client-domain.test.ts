@@ -94,6 +94,9 @@ test("question catalog list rendering escapes HTML-sensitive values", () => {
   })
   const html = catalog.renderQuestionListHtml(catalog.getCatalog())
 
+  assert.equal(html.includes("/?problemId=unsafe_%3Cid%3E"), true)
+  assert.equal(html.includes("question-library-item-link"), true)
+  assert.equal(html.includes("question-library-item-active-tag"), false)
   assert.equal(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), true)
   assert.equal(html.includes("unsafe_&lt;id&gt;"), true)
   assert.equal(html.includes("&#39;quotes&#39; &amp; symbols."), true)

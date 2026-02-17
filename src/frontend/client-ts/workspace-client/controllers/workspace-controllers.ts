@@ -37,7 +37,20 @@ type VisibleTestCaseControllerOptions = {
   appendDebugLine?: (text: string) => void
 }
 
-type QuestionLibraryResultNodeLike = TextNodeLike & Partial<InnerHtmlNodeLike>
+type QuestionLibraryResultNodeLike = TextNodeLike &
+  Partial<InnerHtmlNodeLike> &
+  Partial<EventNodeLike>
+
+type QuestionLibraryClickTargetLike = {
+  closest?: (selector: string) => {
+    getAttribute?: (name: string) => string | null
+  } | null
+}
+
+type QuestionLibraryClickEventLike = {
+  preventDefault?: () => void
+  target?: unknown
+}
 
 type QuestionCatalogModelLike = {
   getCatalog: () => QuestionCatalogEntry[]
@@ -52,6 +65,7 @@ type QuestionLibraryControllerOptions = {
   questionTypeFilter: InputNodeLike | null
   questionLibraryResults: QuestionLibraryResultNodeLike | null
   questionLibraryCount: TextNodeLike | null
+  navigateToProblem?: (problemPath: string) => void
 }
 
 export class WorkspaceTabController {
@@ -223,6 +237,7 @@ export class QuestionLibraryController {
   private readonly questionTypeFilter: InputNodeLike | null
   private readonly questionLibraryResults: QuestionLibraryResultNodeLike | null
   private readonly questionLibraryCount: TextNodeLike | null
+  private readonly navigateToProblem?: (problemPath: string) => void
   private readonly catalog: QuestionCatalogEntry[]
 
   constructor(options: QuestionLibraryControllerOptions) {
@@ -231,6 +246,7 @@ export class QuestionLibraryController {
     this.questionTypeFilter = options.questionTypeFilter
     this.questionLibraryResults = options.questionLibraryResults
     this.questionLibraryCount = options.questionLibraryCount
+    this.navigateToProblem = options.navigateToProblem
     this.catalog = this.catalogModel.getCatalog()
   }
 
@@ -294,6 +310,37 @@ export class QuestionLibraryController {
     }
     if (this.questionTypeFilter) {
       this.questionTypeFilter.addEventListener("change", this.render.bind(this))
+    }
+    if (
+      this.questionLibraryResults &&
+      typeof this.questionLibraryResults.addEventListener === "function"
+    ) {
+      this.questionLibraryResults.addEventListener(
+        "click",
+        (event: unknown) => {
+          const clickEvent = event as QuestionLibraryClickEventLike
+          const eventTarget = clickEvent.target as QuestionLibraryClickTargetLike
+
+          if (!eventTarget || typeof eventTarget.closest !== "function") {
+            return
+          }
+
+          const questionLink = eventTarget.closest(".question-library-item-link")
+          if (!questionLink || typeof questionLink.getAttribute !== "function") {
+            return
+          }
+
+          const problemPath = questionLink.getAttribute("href")
+          if (!problemPath || typeof this.navigateToProblem !== "function") {
+            return
+          }
+
+          if (typeof clickEvent.preventDefault === "function") {
+            clickEvent.preventDefault()
+          }
+          this.navigateToProblem(problemPath)
+        }
+      )
     }
   }
 }

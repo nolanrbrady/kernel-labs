@@ -150,6 +150,8 @@ export type QuestionCatalogEntry = {
   problemType: string
   summary: string
   estimatedMinutes: number
+  schedulerWeight?: number
+  problemPath?: string
 }
 
 export type VisibleTestCaseState = {

@@ -23,6 +23,8 @@ export type RankedSessionCandidates = {
   prioritizedNewProblem: boolean
   resurfacingDebtCount: 0
   rankedResurfacedProblemIds: string[]
+  interchangeableResurfacedProblemIds: string[]
+  interchangeableThreshold: number
 }
 
 export type SessionAssignmentPlan = {
@@ -30,6 +32,8 @@ export type SessionAssignmentPlan = {
   assignedProblemIds: string[]
   resurfacedAssignedCount: 0 | 1
   deferredResurfacedProblemIds: string[]
+  interchangeableResurfacedProblemIds: string[]
+  selectedInterchangeableProblemId: string | null
 }
 
 const CORRECTNESS_INTERVAL_BASE: Record<SchedulerCorrectness, number> = {
@@ -44,8 +48,33 @@ const CORRECTNESS_PRIORITY_BASE: Record<SchedulerCorrectness, number> = {
   fail: 0.8
 }
 
+const DEFAULT_INTERCHANGEABLE_THRESHOLD = 0.03
+const INTERCHANGEABLE_THRESHOLD_EPSILON = 1e-9
+
 function clamp(minimum: number, value: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
+}
+
+function normalizeInterchangeableThreshold(threshold: number | undefined): number {
+  if (typeof threshold !== "number" || Number.isFinite(threshold) === false) {
+    return DEFAULT_INTERCHANGEABLE_THRESHOLD
+  }
+
+  return Math.max(0, threshold)
+}
+
+function sortResurfacedCandidates(
+  resurfacedCandidates: ResurfacedCandidate[]
+): ResurfacedCandidate[] {
+  return [...resurfacedCandidates].sort((first, second) => {
+    const priorityDelta = second.resurfacingPriority - first.resurfacingPriority
+
+    if (priorityDelta !== 0) {
+      return priorityDelta
+    }
+
+    return first.problemId.localeCompare(second.problemId)
+  })
 }
 
 export function calculateSpacedRepetitionSchedule(
@@ -85,35 +114,75 @@ export function calculateSpacedRepetitionSchedule(
 export function rankSessionCandidates(options: {
   newProblemIds: string[]
   resurfacedCandidates: ResurfacedCandidate[]
+  interchangeableThreshold?: number
 }): RankedSessionCandidates {
-  const rankedResurfacedProblemIds = [...options.resurfacedCandidates]
-    .sort((first, second) => {
-      return second.resurfacingPriority - first.resurfacingPriority
-    })
-    .map((candidate) => candidate.problemId)
+  const interchangeableThreshold = normalizeInterchangeableThreshold(
+    options.interchangeableThreshold
+  )
+  const rankedResurfacedCandidates = sortResurfacedCandidates(
+    options.resurfacedCandidates
+  )
+  const rankedResurfacedProblemIds = rankedResurfacedCandidates.map((candidate) => {
+    return candidate.problemId
+  })
 
   const prioritizedNewProblem = options.newProblemIds.length > 0
   const primaryProblemId = prioritizedNewProblem
     ? options.newProblemIds[0] ?? null
     : rankedResurfacedProblemIds[0] ?? null
+  const interchangeableResurfacedProblemIds =
+    prioritizedNewProblem || rankedResurfacedCandidates.length === 0
+      ? []
+      : rankedResurfacedCandidates
+          .filter((candidate) => {
+            return (
+              rankedResurfacedCandidates[0].resurfacingPriority -
+                candidate.resurfacingPriority <=
+              interchangeableThreshold + INTERCHANGEABLE_THRESHOLD_EPSILON
+            )
+          })
+          .map((candidate) => {
+            return candidate.problemId
+          })
 
   return {
     primaryProblemId,
     prioritizedNewProblem,
     resurfacingDebtCount: 0,
-    rankedResurfacedProblemIds
+    rankedResurfacedProblemIds,
+    interchangeableResurfacedProblemIds,
+    interchangeableThreshold
   }
 }
 
 export function planSessionAssignment(options: {
   newProblemIds: string[]
   resurfacedCandidates: ResurfacedCandidate[]
+  interchangeableThreshold?: number
+  selectedProblemId?: string | null
 }): SessionAssignmentPlan {
-  const rankedCandidates = rankSessionCandidates(options)
+  const rankedCandidates = rankSessionCandidates({
+    newProblemIds: options.newProblemIds,
+    resurfacedCandidates: options.resurfacedCandidates,
+    interchangeableThreshold: options.interchangeableThreshold
+  })
+  const selectedInterchangeableProblemId =
+    rankedCandidates.prioritizedNewProblem ||
+    rankedCandidates.interchangeableResurfacedProblemIds.length === 0
+      ? null
+      : typeof options.selectedProblemId === "string" &&
+          rankedCandidates.interchangeableResurfacedProblemIds.includes(
+            options.selectedProblemId
+          )
+        ? options.selectedProblemId
+        : rankedCandidates.primaryProblemId
+  const primaryProblemId =
+    rankedCandidates.prioritizedNewProblem ||
+    selectedInterchangeableProblemId === null
+      ? rankedCandidates.primaryProblemId
+      : selectedInterchangeableProblemId
   const assignedProblemIds =
-    rankedCandidates.primaryProblemId === null
-      ? []
-      : [rankedCandidates.primaryProblemId]
+    primaryProblemId === null ? [] : [primaryProblemId]
   const resurfacedAssignedCount = rankedCandidates.prioritizedNewProblem
     ? 0
     : assignedProblemIds.length === 0
@@ -121,12 +190,17 @@ export function planSessionAssignment(options: {
       : 1
 
   return {
-    primaryProblemId: rankedCandidates.primaryProblemId,
+    primaryProblemId,
     assignedProblemIds,
     resurfacedAssignedCount,
+    interchangeableResurfacedProblemIds:
+      rankedCandidates.interchangeableResurfacedProblemIds,
+    selectedInterchangeableProblemId,
     deferredResurfacedProblemIds:
       resurfacedAssignedCount === 1
-        ? rankedCandidates.rankedResurfacedProblemIds.slice(1)
+        ? rankedCandidates.rankedResurfacedProblemIds.filter((problemId) => {
+            return problemId !== primaryProblemId
+          })
         : rankedCandidates.rankedResurfacedProblemIds
   }
 }

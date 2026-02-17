@@ -176,6 +176,8 @@ test("editor-first screen renders starter code with run/submit and account CTA",
   assert.equal(markup.includes("Submit Topic"), true)
   assert.equal(markup.includes("suggest-topic-status"), true)
   assert.equal(markup.includes("Showing 2 of 2 questions."), true)
+  assert.equal(markup.includes("question-library-item-link"), true)
+  assert.equal(markup.includes("question-library-item-active-tag"), true)
   assert.equal(markup.includes("[Normalization] normalization_layernorm_v1 - 25m"), true)
   assert.equal(markup.includes("[Attention] attention_scaled_dot_product_v1 - 30m"), true)
 })

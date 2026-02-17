@@ -7,6 +7,7 @@ type EventHandler = (event?: {
   key?: string
   shiftKey?: boolean
   preventDefault?: () => void
+  target?: unknown
 }) => unknown | Promise<unknown>
 
 type FakeElement = {
@@ -36,6 +37,7 @@ type FetchCall = {
 const originalDocument = (globalThis as { document?: unknown }).document
 const originalFetch = (globalThis as { fetch?: unknown }).fetch
 const originalLocalStorage = (globalThis as { localStorage?: unknown }).localStorage
+const originalLocation = (globalThis as { location?: unknown }).location
 const originalDate = Date
 const originalSetInterval = (globalThis as { setInterval?: unknown }).setInterval
 const originalClearInterval = (globalThis as { clearInterval?: unknown }).clearInterval
@@ -104,6 +106,7 @@ function runWorkspaceClientScripts(context: ReturnType<typeof createContext>) {
   ;(globalThis as { document?: unknown }).document = context.document
   ;(globalThis as { fetch?: unknown }).fetch = context.fetch
   ;(globalThis as { localStorage?: unknown }).localStorage = context.localStorage
+  ;(globalThis as { location?: unknown }).location = context.location
 
   if (typeof context.Date === "function") {
     ;(globalThis as { Date: DateConstructor }).Date = context.Date as DateConstructor
@@ -124,6 +127,7 @@ test.afterEach(() => {
   ;(globalThis as { document?: unknown }).document = originalDocument
   ;(globalThis as { fetch?: unknown }).fetch = originalFetch
   ;(globalThis as { localStorage?: unknown }).localStorage = originalLocalStorage
+  ;(globalThis as { location?: unknown }).location = originalLocation
   ;(globalThis as { Date: DateConstructor }).Date = originalDate
   ;(globalThis as { setInterval?: unknown }).setInterval = originalSetInterval
   ;(globalThis as { clearInterval?: unknown }).clearInterval = originalClearInterval
@@ -1621,6 +1625,123 @@ test("workspace question library supports fuzzy search, type filtering, and sugg
     debugShellOutput.textContent.includes("topic suggestion submitted: Attention | Medium | Rotary Positional Embeddings On Toy Tensors"),
     true
   )
+})
+
+test("workspace question library card click navigates to selected problem path", async () => {
+  const runButton = createFakeElement()
+  const submitButton = createFakeElement()
+  const codeEditor = createFakeElement("", "def solve(x):\n    return x")
+  const runStatus = createFakeElement("Run status: waiting for execution.")
+  const evaluationStatus = createFakeElement(
+    "Evaluation status: run code to generate feedback."
+  )
+  const sessionStatus = createFakeElement("Session status: active.")
+  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const questionSearchInput = createFakeElement()
+  const questionTypeFilter = createFakeElement("", "all")
+  const questionLibraryResults = createFakeElement()
+  const questionLibraryCount = createFakeElement("Showing 1 of 1 questions.")
+  let assignedPath = ""
+
+  const workspaceRoot = {
+    getAttribute(name: string): string | null {
+      if (name === "data-problem-id") {
+        return "attention_scaled_dot_product_v1"
+      }
+      if (name === "data-question-catalog") {
+        return JSON.stringify([
+          {
+            id: "mlp_affine_relu_step_v1",
+            title: "Implement a Single MLP Affine + ReLU Step",
+            problemType: "MLP",
+            summary: "Affine + relu on toy tensors.",
+            estimatedMinutes: 20,
+            problemPath: "/?problemId=mlp_affine_relu_step_v1"
+          }
+        ])
+      }
+
+      return null
+    }
+  }
+  const elements = new Map<string, FakeElement>([
+    ["run-button", runButton],
+    ["submit-button", submitButton],
+    ["starter-code-editor", codeEditor],
+    ["run-status", runStatus],
+    ["evaluation-status", evaluationStatus],
+    ["session-status", sessionStatus],
+    ["schedule-status", scheduleStatus],
+    ["question-search-input", questionSearchInput],
+    ["question-type-filter", questionTypeFilter],
+    ["question-library-results", questionLibraryResults],
+    ["question-library-count", questionLibraryCount]
+  ])
+
+  const context = createContext({
+    document: {
+      querySelector(selector: string) {
+        if (selector === "[data-workspace-root]") {
+          return workspaceRoot
+        }
+
+        return null
+      },
+      getElementById(id: string) {
+        return elements.get(id) ?? null
+      }
+    },
+    fetch: async () => {
+      return createMockResponse({ status: "ok" })
+    },
+    location: {
+      assign(path: string) {
+        assignedPath = path
+      }
+    },
+    localStorage: {
+      getItem() {
+        return null
+      },
+      setItem() {
+        return undefined
+      }
+    },
+    Date: class extends Date {
+      static override now(): number {
+        return 1_733_000_000_000
+      }
+    }
+  })
+
+  runWorkspaceClientScripts(context)
+
+  let prevented = false
+  await questionLibraryResults.handlers.get("click")?.({
+    preventDefault() {
+      prevented = true
+    },
+    target: {
+      closest(selector: string) {
+        if (selector !== ".question-library-item-link") {
+          return null
+        }
+
+        return {
+          getAttribute(name: string) {
+            if (name !== "href") {
+              return null
+            }
+
+            return "/?problemId=mlp_affine_relu_step_v1"
+          }
+        }
+      }
+    }
+  })
+
+  assert.equal(prevented, true)
+  assert.equal(assignedPath, "/?problemId=mlp_affine_relu_step_v1")
 })
 
 test("workspace client script marks visible test-case tabs as pass after successful run", async () => {
