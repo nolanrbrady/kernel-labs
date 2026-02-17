@@ -171,6 +171,22 @@ def main():
     user_code = payload.get("user_code", "")
     function_name = payload.get("function_name", "")
     inputs = payload.get("inputs", {})
+    input_order = payload.get("input_order", [])
+
+    if not isinstance(input_order, list):
+        input_order = []
+
+    def coerce_input(value):
+        if value is None:
+            return None
+        if isinstance(value, (int, float, bool)):
+            return value
+        if isinstance(value, list):
+            try:
+                return np.array(value, dtype=float)
+            except Exception:
+                return value
+        return value
 
     try:
         with redirect_stdout(captured_stdout):
@@ -184,18 +200,21 @@ def main():
         fail(f"Expected callable '{function_name}' was not found.", captured_stdout.getvalue())
         return
 
-    q = np.array(inputs.get("q", []), dtype=float)
-    k = np.array(inputs.get("k", []), dtype=float)
-    v = np.array(inputs.get("v", []), dtype=float)
-    mask_data = inputs.get("mask")
-    mask = None if mask_data is None else np.array(mask_data, dtype=float)
+    args = []
+    for name in input_order:
+        args.append(coerce_input(inputs.get(name)))
 
     try:
         with redirect_stdout(captured_stdout):
-            try:
-                result = fn(q, k, v, mask)
-            except TypeError:
-                result = fn(q, k, v)
+            attempt_args = list(args)
+            while True:
+                try:
+                    result = fn(*attempt_args)
+                    break
+                except TypeError:
+                    if len(attempt_args) <= 1:
+                        raise
+                    attempt_args = attempt_args[:-1]
     except Exception as error:
         fail(f"Code raised an exception while running: {error}", captured_stdout.getvalue())
         return
@@ -312,6 +331,7 @@ function runPythonUserCode(options: {
   userCode: string
   functionName: string
   inputs: Record<string, unknown>
+  inputOrder: string[]
 }): PythonRunnerSuccess | PythonRunnerFailure {
   try {
     const stdout = execFileSync(
@@ -321,7 +341,8 @@ function runPythonUserCode(options: {
         input: JSON.stringify({
           user_code: options.userCode,
           function_name: options.functionName,
-          inputs: options.inputs
+          inputs: options.inputs,
+          input_order: options.inputOrder
         }),
         encoding: "utf8",
         timeout: 10000,
@@ -399,7 +420,8 @@ export function runStarterCodeAgainstToyInputs(
   const executionResult = runPythonUserCode({
     userCode,
     functionName: fixture.functionName,
-    inputs: fixture.inputs
+    inputs: fixture.inputs,
+    inputOrder: fixture.inputOrder
   })
 
   if (executionResult.status === "failure") {
@@ -436,7 +458,8 @@ export function runStarterCodeAgainstToyInputs(
         : runPythonUserCode({
             userCode,
             functionName: fixture.functionName,
-            inputs: testCase.inputs
+            inputs: testCase.inputs,
+            inputOrder: fixture.inputOrder
           })
 
     return evaluateSingleTestCase({

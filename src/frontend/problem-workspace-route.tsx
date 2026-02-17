@@ -2360,13 +2360,13 @@ export function ProblemWorkspaceScreen(props: {
   const problemCategory = route.problem.category ?? "Attention"
   const problemConceptDescription =
     route.problem.conceptDescription ??
-    "Scaled dot-product attention transforms token features by comparing query-key similarity, normalizing with softmax, and aggregating value vectors into context-aware outputs."
+    "Scaled dot-product attention transforms token features by comparing query-key similarity, normalizing with softmax, and aggregating value vectors into context-aware outputs. This workspace uses a single-sequence 2D toy formulation so the core math is isolated from batch/head bookkeeping."
   const inputSpecification =
     route.problem.inputSpecification ??
-    "q, k, v are toy float tensors with shape [batch, seq_len, d_k]. Optional mask shape is broadcastable to [batch, seq_len, seq_len] and blocks disallowed attention positions."
+    "q, k, v are toy float arrays with shape [seq_len, d_k]. Optional mask is an additive bias matrix with shape [seq_len, seq_len] and suppresses disallowed attention targets before softmax."
   const expectedOutputSpecification =
     route.problem.expectedOutputSpecification ??
-    "Output shape must be [batch, seq_len, d_k]. Numerical behavior should remain finite and stable with masked positions suppressed before softmax."
+    "Output shape must be [seq_len, d_k]. Numerical behavior should remain finite and stable with masked positions suppressed before softmax."
   const formulaNotes = route.problem.formulaNotes ?? [
     "\\mathrm{scores} = \\frac{QK^{\\top}}{\\sqrt{d_k}}",
     "\\mathrm{masked\\_scores} = \\mathrm{scores} + \\mathrm{mask\\_bias}",
@@ -2388,25 +2388,25 @@ export function ProblemWorkspaceScreen(props: {
       id: "case_1_balanced_tokens",
       name: "Case 1 - Balanced Tokens",
       inputSummary:
-        "q, k, v each shape [1, 2, 2] with small positive/negative values and no mask.",
+        "q, k, v each shape [2, 2] with small values and no mask.",
       expectedOutputSummary:
-        "Output shape [1, 2, 2] with finite values preserving weighted context mixing."
+        "Output shape [2, 2] with finite values preserving weighted context mixing."
     },
     {
       id: "case_2_causal_masking",
       name: "Case 2 - Causal Masking",
       inputSummary:
-        "Same q, k, v shape [1, 3, 2] with an upper-triangular mask blocking future tokens.",
+        "q, k, v shape [3, 2] with an upper-triangular mask blocking future tokens.",
       expectedOutputSummary:
         "Later positions can attend to prior tokens only; masked logits do not affect probabilities."
     },
     {
-      id: "case_3_batched_stability",
-      name: "Case 3 - Batched Stability",
+      id: "case_3_stability_magnitudes",
+      name: "Case 3 - Stability Magnitudes",
       inputSummary:
-        "Batched q, k, v shape [2, 3, 4] with varied magnitudes to stress numeric stability.",
+        "q, k, v shape [3, 2] with varied magnitudes to stress numeric stability.",
       expectedOutputSummary:
-        "Output shape [2, 3, 4], finite values, and no NaN/Inf across both batch items."
+        "Output shape [3, 2], finite values, and no NaN/Inf."
     }
   ]
   const paperLinks = route.problem.paperLinks ?? [

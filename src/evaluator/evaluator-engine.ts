@@ -137,15 +137,19 @@ export function evaluateOutputAgainstFixture(
     candidateOutput.flat().every((value) => Number.isFinite(value)) &&
     (getMaxAbsValue(candidateOutput) ?? 0) <= 10000
 
+  const isAttentionProblem =
+    request.problemId.startsWith("attention_") ||
+    request.problemId.includes("_attention_")
   const invarianceTolerance = 0.0001
-  const invariancePassed =
-    isCandidateMatrix &&
-    shapePassed &&
-    areMatricesClose(
-      rowCenter(candidateOutput),
-      rowCenter(expectedOutput),
-      invarianceTolerance
-    )
+  const invariancePassed = isAttentionProblem
+    ? isCandidateMatrix &&
+      shapePassed &&
+      areMatricesClose(
+        rowCenter(candidateOutput),
+        rowCenter(expectedOutput),
+        invarianceTolerance
+      )
+    : Boolean(isCandidateMatrix && shapePassed && numericalSanityPassed)
 
   const exactValueTolerance = 0.000001
   const exactValuePassed =
@@ -179,7 +183,9 @@ export function evaluateOutputAgainstFixture(
       invariance: {
         passed: invariancePassed,
         tolerance: invarianceTolerance,
-        details: "Row-centered output must match expected row-centered output."
+        details: isAttentionProblem
+          ? "Row-centered output must match expected row-centered output."
+          : "Invariance checks are not applied for this deterministic toy fixture; use exact-value tolerance instead."
       },
       numericalSanity: {
         passed: numericalSanityPassed,
@@ -189,7 +195,7 @@ export function evaluateOutputAgainstFixture(
         passed: exactValuePassed,
         tolerance: exactValueTolerance,
         appliedBecause:
-          "Exact comparison is limited to this deterministic 2x2 toy fixture."
+          "Exact comparison is applied to deterministic toy fixtures (within tolerance) to ensure solution correctness."
       }
     }
   }

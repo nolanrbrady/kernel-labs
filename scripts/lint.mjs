@@ -62,6 +62,16 @@ async function main() {
   for (const file of files.sort()) {
     await lintFile(file);
   }
+
+  const problemBankLint = spawnSync(
+    process.execPath,
+    ["--import", "tsx", "scripts/problem-bank-lint.ts"],
+    { stdio: "inherit" }
+  );
+
+  if (problemBankLint.status !== 0) {
+    throw new Error("Problem bank lint failed.");
+  }
 }
 
 await main();

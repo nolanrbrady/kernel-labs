@@ -66,13 +66,13 @@ const DEFAULT_WORKSPACE_PROBLEM: WorkspaceProblem = {
   id: "attention_scaled_dot_product_v1",
   title: "Implement Scaled Dot-Product Attention",
   category: "Attention",
-  goal: "Compute scaled dot-product attention on toy tensors with optional masking.",
+  goal: "Compute scaled dot-product attention on deterministic toy tensors with optional additive masking (single-sequence 2D simplification).",
   conceptDescription:
-    "Scaled dot-product attention computes pairwise token relevance, normalizes relevance into a probability distribution, and uses it to mix value vectors into contextual representations.",
+    "Scaled dot-product attention computes query-key similarity scores, turns them into a probability distribution via softmax, and uses the weights to mix value vectors. This workspace uses a single-sequence, 2D toy formulation (`q, k, v` shaped `[seq_len, d_k]`) so you can focus on the core math before adding batch/head dimensions.",
   inputSpecification:
-    "Inputs use toy tensors only: q, k, v with shape [batch, seq_len, d_k] and dtype float. Optional mask must be broadcastable to [batch, seq_len, seq_len] and should suppress invalid attention targets.",
+    "Inputs use toy tensors only: `q`, `k`, `v` are 2D arrays shaped `[seq_len, d_k]` (single sequence). Optional `mask` is an additive bias matrix shaped `[seq_len, seq_len]` (use large negative values like -1e9 to suppress attention targets) and is applied before softmax.",
   expectedOutputSpecification:
-    "Return context tensor of shape [batch, seq_len, d_k]. Masked locations should have no effect on normalized attention weights. Outputs must remain finite for deterministic test fixtures.",
+    "Return a 2D context tensor shaped `[seq_len, d_k]`. Masked locations should contribute ~0 probability mass after softmax. Outputs must remain finite on deterministic fixtures.",
   formulaNotes: [
     "\\mathrm{scores} = \\frac{QK^{\\top}}{\\sqrt{d_k}}",
     "\\mathrm{scores} = \\mathrm{scores} + \\mathrm{mask\\_bias}",
@@ -94,9 +94,9 @@ const DEFAULT_WORKSPACE_PROBLEM: WorkspaceProblem = {
       id: "case_1_balanced_tokens",
       name: "Case 1 - Balanced Tokens",
       inputSummary:
-        "q, k, v shapes [1, 2, 2] without a mask; verify basic attention weighting behavior.",
+        "q, k, v shapes [2, 2] without a mask; verify basic attention weighting behavior.",
       expectedOutputSummary:
-        "Output shape [1, 2, 2] with finite values and smooth weighted mixing.",
+        "Output shape [2, 2] with finite values and smooth weighted mixing.",
       reasoning:
         "Confirms base attention math before introducing masking edge cases."
     },
@@ -104,21 +104,21 @@ const DEFAULT_WORKSPACE_PROBLEM: WorkspaceProblem = {
       id: "case_2_causal_masking",
       name: "Case 2 - Causal Masking",
       inputSummary:
-        "q, k, v shapes [1, 3, 2] with a causal mask suppressing future-token attention.",
+        "q, k, v shapes [3, 2] with a causal mask suppressing future-token attention.",
       expectedOutputSummary:
         "Masked positions have no probability mass and context respects causal order.",
       reasoning:
         "Validates mask application before softmax normalization."
     },
     {
-      id: "case_3_batched_stability",
-      name: "Case 3 - Batched Stability",
+      id: "case_3_stability_magnitudes",
+      name: "Case 3 - Stability Magnitudes",
       inputSummary:
-        "q, k, v shapes [2, 3, 4] across two batch items with varied magnitudes.",
+        "q, k, v shapes [3, 2] with varied magnitudes to stress softmax stability.",
       expectedOutputSummary:
-        "Output shape [2, 3, 4], no NaN/Inf, and deterministic finite behavior.",
+        "Output shape [3, 2], no NaN/Inf, and deterministic finite behavior.",
       reasoning:
-        "Checks numerical sanity and batch-shape invariants."
+        "Checks numerical sanity under magnitude variation without introducing extra batch dimensions."
     }
   ],
   paperLinks: [
@@ -130,7 +130,7 @@ const DEFAULT_WORKSPACE_PROBLEM: WorkspaceProblem = {
   ],
   questionCatalog: DEFAULT_QUESTION_LIBRARY,
   starterCode:
-    "import numpy as np\nimport torch\nimport pandas as pd\n\n\ndef scaled_dot_product_attention(q, k, v, mask=None):\n    # TODO: implement attention core\n    pass"
+    "import numpy as np\n\n\ndef scaled_dot_product_attention(q, k, v, mask=None):\n    \"\"\"Scaled dot-product attention (2D toy formulation).\n\n    Shapes:\n      q, k, v: [seq_len, d_k]\n      mask (optional): [seq_len, seq_len] additive bias applied before softmax\n\n    Returns:\n      context: [seq_len, d_k]\n    \"\"\"\n    # TODO: implement attention core\n    pass"
 }
 
 const anonymousProgressStore = createFileAnonymousProgressStore({

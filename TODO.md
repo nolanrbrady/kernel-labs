@@ -454,6 +454,16 @@ Task line template:
   - Route/start integration assertions for modal structure and key input fields.
   - Client-script integration assertion covering modal open, field capture, validation-ready submission flow, and status/debug updates.
 
+- [x] P2-23 | Question Bank Quality + Lint Gate | Enrich seeded problem specs, add a strict problem-bank lint, and add reference-solution regression tests so new questions remain correct and consistent over time. | blocked_by=none | verify=make test;make lint
+  PRD refs: 6, 8, 18
+  Acceptance:
+  - Seeded problem definitions include richer concept/goal/inputs/eval/hints plus prerequisites/pitfalls.
+  - Every seeded problem has a runtime fixture and a reference Python solution.
+  - Lint fails if a new problem violates authoring standards or lacks runtime/solution coverage.
+  Required tests:
+  - Problem-bank lint test.
+  - Reference-solution runtime regression test.
+
 ## Ralph Loop Handoff Log
 
 Use this template for every completed task:
@@ -504,3 +514,4 @@ Use this template for every completed task:
 - 2026-02-16T23:09:36Z | P2-20 | files=src/runtime/runtime-execution.ts,src/backend/api-app.ts,src/frontend/problem-workspace-route.tsx,tests/runtime-execution-loop.test.ts,tests/runtime-run.endpoint.integration.test.ts,tests/start.entrypoint.integration.test.ts,TODO.md | tests=updated | verify=make test;make lint | risks=lazy-loading heavy packages avoids baseline latency but first torch/pandas use still incurs module import overhead in that run
 - 2026-02-16T23:18:33Z | P2-21 | files=src/problems/runtime-problem-fixtures.ts,src/runtime/runtime-execution.ts,src/frontend/problem-workspace-route.tsx,src/backend/api-app.ts,tests/runtime-execution-loop.test.ts,tests/runtime-run.endpoint.integration.test.ts,tests/editor-first-landing.route.test.tsx,tests/start.entrypoint.integration.test.ts,tests/workspace-client-script.integration.test.ts,TODO.md | tests=updated | verify=make test;make lint | risks=per-case deterministic checks rerun user code across multiple fixtures and may increase run latency for print-heavy or expensive solutions
 - 2026-02-16T23:23:04Z | P2-22 | files=src/frontend/problem-workspace-route.tsx,tests/workspace-client-script.integration.test.ts,tests/editor-first-landing.route.test.tsx,tests/start.entrypoint.integration.test.ts,TODO.md | tests=updated | verify=make test;make lint | risks=topic suggestions are currently captured client-side for workflow feedback and will require a backend persistence endpoint when productized
+- 2026-02-16T23:59:02Z | P2-23 | files=src/problems/seed-problem-pack.ts,src/problems/runtime-problem-fixtures.ts,src/problems/problem-bank-lint.ts,src/problems/reference-python-solutions.ts,src/runtime/runtime-execution.ts,src/evaluator/evaluator-engine.ts,src/backend/api-app.ts,src/frontend/problem-workspace-route.tsx,scripts/lint.mjs,scripts/problem-bank-lint.ts,tests/problem-bank-lint.test.ts,tests/reference-solutions.runtime-regression.test.ts,tests/start.entrypoint.integration.test.ts,TODO.md | tests=added/updated | verify=make test;make lint | risks=problem-bank correctness now relies on runtime fixtures + reference solutions; future expansion to true batched/headed tensors will require a richer tensor-evaluator contract beyond 2D matrices
