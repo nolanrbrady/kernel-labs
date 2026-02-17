@@ -20,6 +20,7 @@
     "quality-gate": "./scripts/quality_gate.sh"
   },
   "dependencies": {
+    "ace-builds": "^1.43.6",
     "express": "^5.1.0",
     "katex": "^0.16.28",
     "react": "^19.1.1",

@@ -577,6 +577,7 @@ body {
 }
 
 .code-editor-highlight,
+.code-editor-ace,
 .code-editor {
   position: absolute;
   inset: 0;
@@ -594,6 +595,11 @@ body {
   tab-size: 2;
   width: 100%;
   height: 100%;
+}
+
+.code-editor-ace {
+  display: none;
+  z-index: 2;
 }
 
 .code-editor-highlight {
@@ -651,6 +657,15 @@ textarea.code-editor {
 
 [data-editor-enhanced="true"] textarea.code-editor {
   color: transparent;
+}
+
+[data-editor-mode="ace"] .code-editor-ace {
+  display: block;
+}
+
+[data-editor-mode="ace"] .code-editor-highlight,
+[data-editor-mode="ace"] textarea.code-editor {
+  display: none;
 }
 
 /* ─── Action Buttons ─── */

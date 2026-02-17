@@ -45,6 +45,7 @@ export function initializeProblemWorkspaceClient(): void {
   const runButton = getElementById<HTMLButtonElement>("run-button")
   const submitButton = getElementById<HTMLButtonElement>("submit-button")
   const codeEditor = getElementById<HTMLTextAreaElement>("starter-code-editor")
+  const codeAceHost = getElementById<HTMLElement>("starter-code-ace")
   const codeHighlight = getElementById<HTMLElement>("starter-code-highlight")
   let codeEditorShell: HTMLElement | null =
     codeEditor && typeof codeEditor.closest === "function"
@@ -289,6 +290,7 @@ export function initializeProblemWorkspaceClient(): void {
 
   const editorController = new EditorController({
     codeEditor,
+    codeAceHost,
     codeHighlight,
     codeEditorShell,
     onTypingStart: (sourceLabel: string) => {
@@ -637,6 +639,7 @@ export function initializeProblemWorkspaceClient(): void {
 
   function applyTheme(theme: string): void {
     document.documentElement.setAttribute("data-theme", theme)
+    editorController.syncThemeWithDocument()
     if (canUseLocalStorage()) {
       try {
         localStorage.setItem(themeStorageKey, theme)

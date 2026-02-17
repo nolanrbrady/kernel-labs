@@ -33,6 +33,9 @@ type FakeElement = {
   textContent: string
   innerHTML: string
   value: string
+  style: {
+    display?: string
+  }
   className: string
   hidden: boolean
   ariaSelected: string
@@ -49,6 +52,7 @@ type FakeElement = {
   getAttribute: (name: string) => string | null
   setSelectionRange: (start: number, end: number) => void
   focus: () => void
+  contains: (target: unknown) => boolean
 }
 
 function createFakeElement(textContent = "", value = ""): FakeElement {
@@ -59,6 +63,7 @@ function createFakeElement(textContent = "", value = ""): FakeElement {
     textContent,
     innerHTML: textContent,
     value,
+    style: {},
     className: "",
     hidden: false,
     ariaSelected: "false",
@@ -100,6 +105,9 @@ function createFakeElement(textContent = "", value = ""): FakeElement {
     },
     focus() {
       this.focused = true
+    },
+    contains(target) {
+      return target === this
     }
   }
 }
@@ -156,10 +164,12 @@ function loadControllerClasses() {
       EditorController: new (options: {
         codeEditor: FakeElement
         codeHighlight: FakeElement
+        codeAceHost?: FakeElement
         codeEditorShell: FakeElement
         onTypingStart: (sourceLabel: string) => void
       }) => {
         bind: () => void
+        syncThemeWithDocument: () => void
       }
       WorkspaceTabController: new (options: {
         workspaceTabProblem: FakeElement
@@ -892,6 +902,92 @@ test("editor controller handles tab indentation, highlight rendering, and typing
     key: "a"
   })
   assert.equal(typingSource, "first-character")
+})
+
+test("editor controller uses ace when available and keeps textarea state in sync", async () => {
+  const { controllers } = loadControllerClasses()
+  const codeEditor = createFakeElement("", "def solve(x):\n    return x")
+  const codeHighlight = createFakeElement()
+  const codeEditorShell = createFakeElement()
+  const codeAceHost = createFakeElement()
+  const originalAce = (globalThis as { ace?: unknown }).ace
+  const originalDocument = (globalThis as { document?: unknown }).document
+  let typingSource = ""
+  let currentTheme = "light"
+  let currentAceValue = ""
+  let changeHandler: (() => void) | undefined
+  let themeName = ""
+
+  ;(globalThis as { ace?: unknown }).ace = {
+    edit(element: unknown) {
+      assert.equal(element, codeAceHost)
+      return {
+        session: {
+          setMode: () => undefined,
+          setUseSoftTabs: () => undefined,
+          setTabSize: () => undefined,
+          setValue(value: string) {
+            currentAceValue = value
+          },
+          getValue() {
+            return currentAceValue
+          },
+          on(eventName: string, handler: () => void) {
+            if (eventName === "change") {
+              changeHandler = handler
+            }
+          }
+        },
+        setTheme(theme: string) {
+          themeName = theme
+        },
+        setOptions: () => undefined,
+        on: () => undefined,
+        focus: () => undefined,
+        resize: () => undefined
+      }
+    }
+  }
+  ;(globalThis as { document?: unknown }).document = {
+    documentElement: {
+      getAttribute(name: string) {
+        return name === "data-theme" ? currentTheme : null
+      }
+    }
+  }
+
+  try {
+    const editorController = new controllers.EditorController({
+      codeEditor,
+      codeHighlight,
+      codeAceHost,
+      codeEditorShell,
+      onTypingStart(sourceLabel: string) {
+        typingSource = sourceLabel
+      }
+    })
+
+    editorController.bind()
+
+    assert.equal(
+      codeEditorShell.getAttribute("data-editor-mode"),
+      "ace"
+    )
+    assert.equal(themeName, "ace/theme/github")
+    assert.equal(codeEditor.value, "def solve(x):\n    return x")
+
+    currentAceValue = "def solve(x):\n    return x + 1"
+    changeHandler?.()
+    assert.equal(codeEditor.value, "def solve(x):\n    return x + 1")
+    assert.equal(typingSource, "first-character")
+
+    currentTheme = "dark"
+    editorController.syncThemeWithDocument()
+    assert.equal(themeName, "ace/theme/tomorrow_night")
+  } finally {
+    ;(globalThis as { ace?: unknown }).ace = originalAce
+    ;(globalThis as { document?: unknown }).document = originalDocument
+  }
 })
 
 test("workspace tab controller switches visible panels and accessibility state", async () => {

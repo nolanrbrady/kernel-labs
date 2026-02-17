@@ -698,6 +698,11 @@ export function ProblemWorkspaceScreen(props: {
             <span className="problem-chip">{problemCategory}</span>
           </header>
           <div className="code-editor-shell">
+            <div
+              className="code-editor-ace"
+              id="starter-code-ace"
+              aria-hidden="true"
+            />
             <pre className="code-editor-highlight" id="starter-code-highlight" aria-hidden="true">
               <code>{route.problem.starterCode}</code>
             </pre>

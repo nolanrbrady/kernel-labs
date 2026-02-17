@@ -13,6 +13,14 @@ export function renderHtmlDocument(
   options: { includeClientScript?: boolean } = {}
 ): string {
   const versionQuery = `?v=${encodeURIComponent(staticAssetVersion)}`
+  const aceScriptTags = options.includeClientScript
+    ? [
+        `<script defer src="/static/workspace-client/vendor/ace/ace.js${versionQuery}"></script>`,
+        `<script defer src="/static/workspace-client/vendor/ace/mode-python.js${versionQuery}"></script>`,
+        `<script defer src="/static/workspace-client/vendor/ace/theme-github.js${versionQuery}"></script>`,
+        `<script defer src="/static/workspace-client/vendor/ace/theme-tomorrow_night.js${versionQuery}"></script>`
+      ].join("\n    ")
+    : ""
   const clientScriptTag = options.includeClientScript
     ? `\n    <script type="module" src="/static/workspace-client/index.js${versionQuery}"></script>`
     : ""
@@ -27,7 +35,7 @@ export function renderHtmlDocument(
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/workspace-client/problem-workspace.css${versionQuery}" data-theme="deepmlsr-workspace">${clientScriptTag}
+    <link rel="stylesheet" href="/static/workspace-client/problem-workspace.css${versionQuery}" data-theme="deepmlsr-workspace">${aceScriptTags}${clientScriptTag}
   </head>
   <body>
     ${bodyMarkup}

@@ -10,6 +10,8 @@ const staticWorkspaceDir = join(
   "workspace-client"
 )
 const sourceFrontendDir = join(repoRoot, "src", "frontend")
+const aceBuildSourceDir = join(repoRoot, "node_modules", "ace-builds", "src-noconflict")
+const aceVendorOutputDir = join(staticWorkspaceDir, "vendor", "ace")
 
 function runTypeScriptBuild() {
   const result = spawnSync(
@@ -42,6 +44,27 @@ async function copyWorkspaceStyles() {
   )
 }
 
+async function copyAceAssets() {
+  await mkdir(aceVendorOutputDir, { recursive: true })
+
+  const aceFiles = [
+    "ace.js",
+    "mode-python.js",
+    "theme-github.js",
+    "theme-tomorrow_night.js"
+  ]
+
+  await Promise.all(
+    aceFiles.map(async (fileName) => {
+      await copyFile(
+        join(aceBuildSourceDir, fileName),
+        join(aceVendorOutputDir, fileName)
+      )
+    })
+  )
+}
+
 await resetOutputDir()
 runTypeScriptBuild()
 await copyWorkspaceStyles()
+await copyAceAssets()

@@ -103,6 +103,7 @@ test("editor-first screen renders starter code with run/submit and account CTA",
   assert.equal(markup.includes("Feedback stays supportive"), true)
   assert.equal(markup.includes("workspace-shell"), true)
   assert.equal(markup.includes("code-editor-shell"), true)
+  assert.equal(markup.includes("starter-code-ace"), true)
   assert.equal(markup.includes("starter-code-editor"), true)
   assert.equal(markup.includes("starter-code-highlight"), true)
   assert.equal(markup.includes("code-editor-highlight"), true)

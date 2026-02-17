@@ -47,6 +47,22 @@ test("single start entrypoint serves health API and editor-first workspace", asy
     rootHtml.includes('src="/static/workspace-client/index.js?v='),
     true
   )
+  assert.equal(
+    rootHtml.includes('src="/static/workspace-client/vendor/ace/ace.js?v='),
+    true
+  )
+  assert.equal(
+    rootHtml.includes('src="/static/workspace-client/vendor/ace/mode-python.js?v='),
+    true
+  )
+  assert.equal(
+    rootHtml.includes('src="/static/workspace-client/vendor/ace/theme-github.js?v='),
+    true
+  )
+  assert.equal(
+    rootHtml.includes('src="/static/workspace-client/vendor/ace/theme-tomorrow_night.js?v='),
+    true
+  )
   assert.equal(rootHtml.includes("data-theme=\"deepmlsr-workspace\""), true)
 
   // React-rendered workspace markup
@@ -60,6 +76,7 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(rootHtml.includes("flag-problem-reason"), true)
   assert.equal(rootHtml.includes("flag-problem-status"), true)
   assert.equal(rootHtml.includes("code-editor-shell"), true)
+  assert.equal(rootHtml.includes("starter-code-ace"), true)
   assert.equal(rootHtml.includes("starter-code-editor"), true)
   assert.equal(rootHtml.includes("starter-code-highlight"), true)
   assert.equal(rootHtml.includes("import numpy as np"), true)
@@ -176,6 +193,14 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(jsText.includes("new SessionController"), true)
   assert.equal(jsText.includes("new SubmissionController"), true)
   assert.equal(jsText.includes("submissionController.submitSession(\"timer-cap\")"), true)
+
+  const aceResponse = await fetch(
+    `${base}/static/workspace-client/vendor/ace/ace.js`
+  )
+  assert.equal(aceResponse.status, 200)
+  assert.equal(aceResponse.headers.get("content-type")?.includes("javascript"), true)
+  const aceText = await aceResponse.text()
+  assert.equal(aceText.includes("global.ace"), true)
 
   const domainResponse = await fetch(
     `${base}/static/workspace-client/domain/models.js`
