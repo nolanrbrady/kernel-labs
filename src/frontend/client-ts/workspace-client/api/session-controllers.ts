@@ -1,9 +1,10 @@
 /* Runtime/session API adapters and submission controllers. */
 
-import { setText } from "../shared/dom-utils.js"
+import { setClassFlag, setText } from "../shared/dom-utils.js"
 import type {
   ApiEnvelope,
   ButtonNodeLike,
+  ClassNameNodeLike,
   CodeEditorNodeLike,
   EvaluationPayload,
   FetchLike,
@@ -75,9 +76,12 @@ type SubmissionControllerOptions = {
   problemId: string
   submitButton: ButtonNodeLike | null
   sessionStatus: TextNodeLike | null
+  nextPresentationStatus?: TextNodeLike | null
   scheduleStatus: TextNodeLike | null
+  statusPanel?: ClassNameNodeLike | null
   sessionTimerStatus: TextNodeLike | null
   timerCapMessage: TextNodeLike | null
+  prefersReducedMotion?: boolean
   api: Pick<
     WorkspaceApiAdapters,
     "submitSession" | "syncAnonymousProgress" | "requestSchedulerDecision"
@@ -94,6 +98,7 @@ type SubmissionControllerOptions = {
   getSessionId: () => string
   getLastEvaluation: () => EvaluationPayload | null
   stopSessionTimer?: () => void
+  nowProvider?: () => number
 }
 
 async function postJson<TPayload>(
@@ -326,7 +331,7 @@ export class SessionController {
     this.resetVisibleCases("Running...")
     this.appendDebug(`$ run #${this.runAttemptCount} (${this.problemId})`)
     this.appendDebug("> executing code against deterministic toy tensors...")
-    setText(this.scheduleStatus, "Scheduling status: waiting for submission.")
+    setText(this.scheduleStatus, "Scheduling details: waiting for submission.")
 
     try {
       const runtimeResult = await this.api.runRuntime(
@@ -471,9 +476,12 @@ export class SubmissionController {
   private readonly problemId: string
   private readonly submitButton: ButtonNodeLike | null
   private readonly sessionStatus: TextNodeLike | null
+  private readonly nextPresentationStatus: TextNodeLike | null
   private readonly scheduleStatus: TextNodeLike | null
+  private readonly statusPanel: ClassNameNodeLike | null
   private readonly sessionTimerStatus: TextNodeLike | null
   private readonly timerCapMessage: TextNodeLike | null
+  private readonly prefersReducedMotion: boolean
   private readonly api: Pick<
     WorkspaceApiAdapters,
     "submitSession" | "syncAnonymousProgress" | "requestSchedulerDecision"
@@ -494,6 +502,7 @@ export class SubmissionController {
   private readonly getSessionId: () => string
   private readonly getLastEvaluation: () => EvaluationPayload | null
   private readonly stopSessionTimer?: () => void
+  private readonly nowProvider: () => number
 
   private sessionSubmitted = false
   private submissionInProgress = false
@@ -502,9 +511,12 @@ export class SubmissionController {
     this.problemId = options.problemId
     this.submitButton = options.submitButton
     this.sessionStatus = options.sessionStatus
+    this.nextPresentationStatus = options.nextPresentationStatus ?? null
     this.scheduleStatus = options.scheduleStatus
+    this.statusPanel = options.statusPanel ?? null
     this.sessionTimerStatus = options.sessionTimerStatus
     this.timerCapMessage = options.timerCapMessage
+    this.prefersReducedMotion = options.prefersReducedMotion ?? false
     this.api = options.api
     this.appendDebugLine = options.appendDebugLine
     this.readLocalProgress = options.readLocalProgress
@@ -516,6 +528,7 @@ export class SubmissionController {
     this.getSessionId = options.getSessionId
     this.getLastEvaluation = options.getLastEvaluation
     this.stopSessionTimer = options.stopSessionTimer
+    this.nowProvider = options.nowProvider ?? (() => Date.now())
   }
 
   private isValidCorrectness(value: unknown): value is WorkspaceCorrectness {
@@ -546,13 +559,43 @@ export class SubmissionController {
     }
   }
 
+  private formatNextPresentationDate(nextIntervalDays: number): string {
+    const normalizedDays = Math.max(0, Math.round(nextIntervalDays))
+    const dayMs = 24 * 60 * 60 * 1000
+    const nextPresentation = new Date(this.nowProvider() + normalizedDays * dayMs)
+    return nextPresentation.toISOString().slice(0, 10)
+  }
+
+  private setCelebrationState(enabled: boolean): void {
+    if (!enabled) {
+      setClassFlag(this.statusPanel, "is-celebrating", false)
+      setClassFlag(this.statusPanel, "is-celebrating-static", false)
+      return
+    }
+
+    setClassFlag(
+      this.statusPanel,
+      "is-celebrating",
+      this.prefersReducedMotion === false
+    )
+    setClassFlag(
+      this.statusPanel,
+      "is-celebrating-static",
+      this.prefersReducedMotion
+    )
+  }
+
   private async updateSchedulerDecision(
     correctness: WorkspaceCorrectness,
     priorProgress: ProgressSnapshotLike
   ): Promise<void> {
     setText(
       this.scheduleStatus,
-      "Scheduling status: computing next resurfacing window..."
+      "Scheduling details: computing next resurfacing window..."
+    )
+    setText(
+      this.nextPresentationStatus,
+      "Days until next presentation: calculating spacing plan..."
     )
 
     try {
@@ -569,19 +612,39 @@ export class SubmissionController {
       if (!schedulerResult.ok) {
         setText(
           this.scheduleStatus,
-          "Scheduling status: unavailable right now. A next problem will still be ready."
+          "Scheduling details: unavailable right now. A next problem will still be ready."
+        )
+        setText(
+          this.nextPresentationStatus,
+          "Days until next presentation: temporarily unavailable."
         )
         return
       }
 
+      const normalizedNextIntervalDays = Math.max(
+        0,
+        Math.round(schedulerPayload.nextIntervalDays)
+      )
+      const nextPresentationDate = this.formatNextPresentationDate(
+        normalizedNextIntervalDays
+      )
+
+      setText(
+        this.nextPresentationStatus,
+        `Days until next presentation: ${normalizedNextIntervalDays} day(s) (${nextPresentationDate}).`
+      )
       setText(
         this.scheduleStatus,
-        `Scheduling status: next resurfacing in ${schedulerPayload.nextIntervalDays} day(s), priority ${schedulerPayload.resurfacingPriority}.`
+        `Scheduling details: resurfacing priority ${schedulerPayload.resurfacingPriority}.`
       )
     } catch (error) {
       setText(
         this.scheduleStatus,
-        "Scheduling status: temporarily unavailable. Your session is still complete."
+        "Scheduling details: temporarily unavailable. Your session is still complete."
+      )
+      setText(
+        this.nextPresentationStatus,
+        "Days until next presentation: temporarily unavailable."
       )
     }
   }
@@ -611,7 +674,11 @@ export class SubmissionController {
     this.appendDebug(`$ submit (${this.problemId})`)
     setText(
       this.scheduleStatus,
-      "Scheduling status: preparing scheduler decision..."
+      "Scheduling details: preparing scheduler decision..."
+    )
+    setText(
+      this.nextPresentationStatus,
+      "Days until next presentation: preparing scheduler output..."
     )
 
     try {
@@ -634,10 +701,16 @@ export class SubmissionController {
             "30 minutes reached. Auto-submit could not complete; please retry submit."
           )
         }
+        setText(
+          this.nextPresentationStatus,
+          "Days until next presentation: unavailable until submit succeeds."
+        )
+        this.setCelebrationState(false)
         return
       }
 
       this.sessionSubmitted = true
+      this.setCelebrationState(true)
       if (typeof this.stopSessionTimer === "function") {
         this.stopSessionTimer()
       }
@@ -664,6 +737,11 @@ export class SubmissionController {
         this.sessionStatus,
         "Submission encountered a temporary issue. Please retry."
       )
+      setText(
+        this.nextPresentationStatus,
+        "Days until next presentation: unavailable until submit succeeds."
+      )
+      this.setCelebrationState(false)
       if (submitSource === "timer-cap") {
         setText(
           this.timerCapMessage,

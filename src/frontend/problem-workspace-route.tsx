@@ -814,7 +814,14 @@ export function ProblemWorkspaceScreen(props: {
               )
             })}
           </section>
-          <section className="status-panel" aria-label="workspace-status">
+          <section
+            className="status-panel"
+            id="workspace-status-panel"
+            aria-label="workspace-status"
+          >
+            <p className="next-presentation-status" id="next-presentation-status">
+              Days until next presentation: pending submission.
+            </p>
             <p className="status-line" id="run-status">
               Run status: waiting for execution.
             </p>
@@ -825,7 +832,10 @@ export function ProblemWorkspaceScreen(props: {
               Session status: active.
             </p>
             <p className="status-line" id="schedule-status">
-              Scheduling status: pending submission.
+              Scheduling details: pending submission.
+            </p>
+            <p className="status-celebration-copy" id="status-celebration-copy">
+              Submission captured. Keep the momentum going.
             </p>
           </section>
           <p className="supportive-feedback">

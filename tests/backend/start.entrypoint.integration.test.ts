@@ -66,10 +66,15 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(rootHtml.includes("import torch"), false)
   assert.equal(rootHtml.includes("import pandas as pd"), false)
   assert.equal(rootHtml.includes("Session status"), true)
+  assert.equal(rootHtml.includes("next-presentation-status"), true)
   assert.equal(rootHtml.includes("hint-tier-1-button"), true)
   assert.equal(rootHtml.includes("hint-tier-2-button"), true)
   assert.equal(rootHtml.includes("hint-tier-3-button"), true)
   assert.equal(rootHtml.includes("schedule-status"), true)
+  assert.equal(
+    rootHtml.includes("Days until next presentation: pending submission."),
+    true
+  )
   assert.equal(rootHtml.includes("Concept Background"), true)
   assert.equal(rootHtml.includes("Input Shape And Constraints"), true)
   assert.equal(rootHtml.includes("Expected Outputs And Evaluation"), true)

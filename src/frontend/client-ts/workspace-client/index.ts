@@ -56,7 +56,13 @@ export function initializeProblemWorkspaceClient(): void {
   const runStatus = getElementById<HTMLElement>("run-status")
   const evaluationStatus = getElementById<HTMLElement>("evaluation-status")
   const sessionStatus = getElementById<HTMLElement>("session-status")
+  const nextPresentationStatus = getElementById<HTMLElement>(
+    "next-presentation-status"
+  )
   const scheduleStatus = getElementById<HTMLElement>("schedule-status")
+  const workspaceStatusPanel = getElementById<HTMLElement>(
+    "workspace-status-panel"
+  )
   const flagProblemButton = getElementById<HTMLButtonElement>("flag-problem-button")
   const flagProblemReasonInput = getElementById<HTMLSelectElement>("flag-problem-reason")
   const flagProblemNotesInput = getElementById<HTMLTextAreaElement>("flag-problem-notes")
@@ -202,6 +208,18 @@ export function initializeProblemWorkspaceClient(): void {
     }
 
     node.textContent = text
+  }
+
+  function getPrefersReducedMotion(): boolean {
+    if (typeof window === "undefined") {
+      return false
+    }
+
+    if (typeof window.matchMedia !== "function") {
+      return false
+    }
+
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches
   }
 
   // ─── Debug Console ───
@@ -363,9 +381,12 @@ export function initializeProblemWorkspaceClient(): void {
     problemId,
     submitButton,
     sessionStatus,
+    nextPresentationStatus,
     scheduleStatus,
+    statusPanel: workspaceStatusPanel,
     sessionTimerStatus,
     timerCapMessage,
+    prefersReducedMotion: getPrefersReducedMotion(),
     api: apiAdapters,
     appendDebugLine,
     readLocalProgress,
@@ -382,7 +403,10 @@ export function initializeProblemWorkspaceClient(): void {
     getLastEvaluation: () => {
       return sessionController.getLastEvaluation()
     },
-    stopSessionTimer
+    stopSessionTimer,
+    nowProvider: () => {
+      return Date.now()
+    }
   })
   const problemFlagController = new ProblemFlagController({
     problemId,

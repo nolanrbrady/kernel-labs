@@ -106,11 +106,16 @@ test("editor-first screen renders starter code with run/submit and account CTA",
   assert.equal(markup.includes("code-editor-highlight"), true)
   assert.equal(markup.includes("run-status"), true)
   assert.equal(markup.includes("session-status"), true)
+  assert.equal(markup.includes("next-presentation-status"), true)
   assert.equal(markup.includes("hint-tier-1-button"), true)
   assert.equal(markup.includes("hint-tier-2-button"), true)
   assert.equal(markup.includes("hint-tier-3-button"), true)
   assert.equal(markup.includes("Hint status: reveal tiers in order"), true)
   assert.equal(markup.includes("schedule-status"), true)
+  assert.equal(
+    markup.includes("Days until next presentation: pending submission."),
+    true
+  )
   assert.equal(markup.includes("problem-context"), true)
   assert.equal(markup.includes("Concept Background"), true)
   assert.equal(markup.includes("Formulas"), true)

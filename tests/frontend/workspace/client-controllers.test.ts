@@ -238,9 +238,12 @@ function loadControllerClasses() {
         problemId: string
         submitButton: FakeElement
         sessionStatus: FakeElement
+        nextPresentationStatus?: FakeElement
         scheduleStatus: FakeElement
+        statusPanel?: FakeElement
         sessionTimerStatus: FakeElement
         timerCapMessage: FakeElement
+        prefersReducedMotion?: boolean
         api: {
           submitSession: (payload: Record<string, unknown>) => Promise<ApiAdapterResult>
           syncAnonymousProgress: (payload: Record<string, unknown>) => Promise<ApiAdapterResult>
@@ -255,7 +258,8 @@ function loadControllerClasses() {
         getHintTierUsed: () => number
         getSessionId: () => string
         getLastEvaluation: () => { correctness: string; explanation: string } | null
-        stopSessionTimer: () => void
+        stopSessionTimer?: () => void
+        nowProvider?: () => number
       }) => {
         bind: () => void
         submitSession: (submitSource: string) => Promise<void>
@@ -461,7 +465,10 @@ test("session controller runs runtime and evaluator flow with deterministic UI u
     "Evaluation: partial - Shape is correct; value drift remains."
   )
   assert.equal(sessionStatus.textContent, "Session in progress.")
-  assert.equal(scheduleStatus.textContent, "Scheduling status: waiting for submission.")
+  assert.equal(
+    scheduleStatus.textContent,
+    "Scheduling details: waiting for submission."
+  )
   assert.deepEqual(resetStatuses, ["Running..."])
   assert.equal(clearDebugCalls, 1)
   assert.deepEqual(appliedResults, [{ id: "case_1", passed: true }])
@@ -562,7 +569,10 @@ test("session controller marks evaluation fail when runtime test cases fail", as
 test("submission controller submits session and keeps done state when sync fails", async () => {
   const { controllers } = loadControllerClasses()
   const submitButton = createFakeElement()
+  const statusPanel = createFakeElement()
+  statusPanel.className = "status-panel"
   const sessionStatus = createFakeElement()
+  const nextPresentationStatus = createFakeElement()
   const scheduleStatus = createFakeElement()
   const sessionTimerStatus = createFakeElement()
   const timerCapMessage = createFakeElement()
@@ -576,7 +586,9 @@ test("submission controller submits session and keeps done state when sync fails
     problemId: "attention_scaled_dot_product_v1",
     submitButton,
     sessionStatus,
+    nextPresentationStatus,
     scheduleStatus,
+    statusPanel,
     sessionTimerStatus,
     timerCapMessage,
     api: {
@@ -641,6 +653,9 @@ test("submission controller submits session and keeps done state when sync fails
     },
     stopSessionTimer() {
       stopTimerCalls += 1
+    },
+    nowProvider() {
+      return 1_733_000_000_000
     }
   })
 
@@ -652,8 +667,17 @@ test("submission controller submits session and keeps done state when sync fails
   assert.equal(sessionStatus.textContent, "Session status: done. Session complete.")
   assert.equal(sessionTimerStatus.textContent, "Session timer: completed.")
   assert.equal(
+    nextPresentationStatus.textContent,
+    "Days until next presentation: 4 day(s) (2024-12-04)."
+  )
+  assert.equal(
     scheduleStatus.textContent,
-    "Scheduling status: next resurfacing in 4 day(s), priority 0.38."
+    "Scheduling details: resurfacing priority 0.38."
+  )
+  assert.equal(/(^|\s)is-celebrating(\s|$)/.test(statusPanel.className), true)
+  assert.equal(
+    /(^|\s)is-celebrating-static(\s|$)/.test(statusPanel.className),
+    false
   )
   assert.equal(schedulerPayload.correctness, "partial")
   assert.equal(schedulerPayload.timeSpentMinutes, 7)
@@ -663,6 +687,97 @@ test("submission controller submits session and keeps done state when sync fails
   assert.equal(debugLines.includes("$ submit (attention_scaled_dot_product_v1)"), true)
   assert.equal(debugLines.includes("> submit accepted: done - Session complete."), true)
   assert.equal(submitButton.disabled, false)
+})
+
+test("submission controller uses static success state when reduced motion is preferred", async () => {
+  const { controllers } = loadControllerClasses()
+  const submitButton = createFakeElement()
+  const statusPanel = createFakeElement()
+  statusPanel.className = "status-panel"
+  const sessionStatus = createFakeElement()
+  const nextPresentationStatus = createFakeElement()
+  const scheduleStatus = createFakeElement()
+  const sessionTimerStatus = createFakeElement()
+  const timerCapMessage = createFakeElement()
+
+  const submissionController = new controllers.SubmissionController({
+    problemId: "attention_scaled_dot_product_v1",
+    submitButton,
+    sessionStatus,
+    nextPresentationStatus,
+    scheduleStatus,
+    statusPanel,
+    sessionTimerStatus,
+    timerCapMessage,
+    prefersReducedMotion: true,
+    api: {
+      async submitSession() {
+        return {
+          ok: true,
+          status: 200,
+          payload: {
+            nextState: { status: "done" },
+            supportiveFeedback: "Session complete."
+          }
+        }
+      },
+      async syncAnonymousProgress() {
+        return {
+          ok: true,
+          status: 200,
+          payload: { status: "ok" }
+        }
+      },
+      async requestSchedulerDecision() {
+        return {
+          ok: true,
+          status: 200,
+          payload: {
+            nextIntervalDays: 2,
+            resurfacingPriority: 0.11
+          }
+        }
+      }
+    },
+    appendDebugLine() {
+      return undefined
+    },
+    readLocalProgress() {
+      return { version: 1, completedProblemIds: [], attemptHistory: [] }
+    },
+    persistAnonymousProgress() {
+      return { version: 1, completedProblemIds: [], attemptHistory: [] }
+    },
+    getPriorSuccessfulCompletions() {
+      return 0
+    },
+    getDaysSinceLastExposure() {
+      return 0
+    },
+    getSessionTimeSpentMinutes() {
+      return 1
+    },
+    getHintTierUsed() {
+      return 0
+    },
+    getSessionId() {
+      return "session-1733000000000"
+    },
+    getLastEvaluation() {
+      return { correctness: "pass", explanation: "All checks passed." }
+    },
+    nowProvider() {
+      return 1_733_000_000_000
+    }
+  })
+
+  await submissionController.submitSession("manual")
+
+  assert.equal(/(^|\s)is-celebrating(\s|$)/.test(statusPanel.className), false)
+  assert.equal(
+    /(^|\s)is-celebrating-static(\s|$)/.test(statusPanel.className),
+    true
+  )
 })
 
 test("problem flag controller submits structured flags and updates status text", async () => {

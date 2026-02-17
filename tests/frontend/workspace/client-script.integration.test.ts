@@ -41,6 +41,7 @@ const originalLocation = (globalThis as { location?: unknown }).location
 const originalDate = Date
 const originalSetInterval = (globalThis as { setInterval?: unknown }).setInterval
 const originalClearInterval = (globalThis as { clearInterval?: unknown }).clearInterval
+const originalWindow = (globalThis as { window?: unknown }).window
 
 function createFakeElement(
   textContent = "",
@@ -107,6 +108,7 @@ function runWorkspaceClientScripts(context: ReturnType<typeof createContext>) {
   ;(globalThis as { fetch?: unknown }).fetch = context.fetch
   ;(globalThis as { localStorage?: unknown }).localStorage = context.localStorage
   ;(globalThis as { location?: unknown }).location = context.location
+  ;(globalThis as { window?: unknown }).window = context.window
 
   if (typeof context.Date === "function") {
     ;(globalThis as { Date: DateConstructor }).Date = context.Date as DateConstructor
@@ -131,6 +133,7 @@ test.afterEach(() => {
   ;(globalThis as { Date: DateConstructor }).Date = originalDate
   ;(globalThis as { setInterval?: unknown }).setInterval = originalSetInterval
   ;(globalThis as { clearInterval?: unknown }).clearInterval = originalClearInterval
+  ;(globalThis as { window?: unknown }).window = originalWindow
 })
 
 test("workspace client script wires run then submit and stores anonymous progress", async () => {
@@ -145,7 +148,12 @@ test("workspace client script wires run then submit and stores anonymous progres
     "Evaluation status: run code to generate feedback."
   )
   const sessionStatus = createFakeElement("Session status: active.")
-  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const nextPresentationStatus = createFakeElement(
+    "Days until next presentation: pending submission."
+  )
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
+  const workspaceStatusPanel = createFakeElement()
+  workspaceStatusPanel.className = "status-panel"
   const debugShellOutput = createFakeElement(
     "$ ready: run your code to inspect runtime and evaluator output."
   )
@@ -165,7 +173,9 @@ test("workspace client script wires run then submit and stores anonymous progres
     ["run-status", runStatus],
     ["evaluation-status", evaluationStatus],
     ["session-status", sessionStatus],
+    ["next-presentation-status", nextPresentationStatus],
     ["schedule-status", scheduleStatus],
+    ["workspace-status-panel", workspaceStatusPanel],
     ["debug-shell-output", debugShellOutput]
   ])
   let storedProgressValue = JSON.stringify({
@@ -293,7 +303,10 @@ test("workspace client script wires run then submit and stores anonymous progres
     "Evaluation: partial - Shape is correct; value drift remains."
   )
   assert.equal(sessionStatus.textContent, "Session in progress.")
-  assert.equal(scheduleStatus.textContent, "Scheduling status: waiting for submission.")
+  assert.equal(
+    scheduleStatus.textContent,
+    "Scheduling details: waiting for submission."
+  )
   assert.equal(debugShellOutput.textContent.includes("$ run #1"), true)
   assert.equal(debugShellOutput.textContent.includes("> runtime success"), true)
   assert.equal(debugShellOutput.textContent.includes("> evaluator: partial"), true)
@@ -375,12 +388,142 @@ test("workspace client script wires run then submit and stores anonymous progres
     "Session status: done. Session complete. You can return tomorrow for a fresh problem."
   )
   assert.equal(
+    nextPresentationStatus.textContent,
+    "Days until next presentation: 4 day(s) (2024-12-04)."
+  )
+  assert.equal(
     scheduleStatus.textContent,
-    "Scheduling status: next resurfacing in 4 day(s), priority 0.38."
+    "Scheduling details: resurfacing priority 0.38."
+  )
+  assert.equal(
+    /(^|\s)is-celebrating(\s|$)/.test(workspaceStatusPanel.className),
+    true
   )
   assert.equal(debugShellOutput.textContent.includes("$ submit"), true)
   assert.equal(debugShellOutput.textContent.includes("> submit accepted: done"), true)
   assert.equal(submitButton.disabled, false)
+})
+
+test("workspace client script uses static submission success state when reduced motion is preferred", async () => {
+  const runButton = createFakeElement()
+  const submitButton = createFakeElement()
+  const codeEditor = createFakeElement("", "def solve(x):\n    return x")
+  const runStatus = createFakeElement("Run status: waiting for execution.")
+  const evaluationStatus = createFakeElement(
+    "Evaluation status: run code to generate feedback."
+  )
+  const sessionStatus = createFakeElement("Session status: active.")
+  const nextPresentationStatus = createFakeElement(
+    "Days until next presentation: pending submission."
+  )
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
+  const workspaceStatusPanel = createFakeElement()
+  workspaceStatusPanel.className = "status-panel"
+  const workspaceRoot = {
+    getAttribute(name: string): string | null {
+      if (name === "data-problem-id") {
+        return "attention_scaled_dot_product_v1"
+      }
+
+      return null
+    }
+  }
+  const elements = new Map<string, FakeElement>([
+    ["run-button", runButton],
+    ["submit-button", submitButton],
+    ["starter-code-editor", codeEditor],
+    ["run-status", runStatus],
+    ["evaluation-status", evaluationStatus],
+    ["session-status", sessionStatus],
+    ["next-presentation-status", nextPresentationStatus],
+    ["schedule-status", scheduleStatus],
+    ["workspace-status-panel", workspaceStatusPanel]
+  ])
+  const fetchMock = async (
+    input: string | URL | Request
+  ): Promise<Response> => {
+    const inputText =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+
+    if (inputText === "/api/session/submit") {
+      return createMockResponse({
+        nextState: {
+          status: "done"
+        },
+        supportiveFeedback: "Session complete."
+      })
+    }
+
+    if (inputText === "/api/progress/anonymous") {
+      return createMockResponse({
+        status: "ok"
+      })
+    }
+
+    if (inputText === "/api/scheduler/decision") {
+      return createMockResponse({
+        nextIntervalDays: 2,
+        resurfacingPriority: 0.11
+      })
+    }
+
+    throw new Error(`Unexpected fetch input: ${inputText}`)
+  }
+  const context = createContext({
+    document: {
+      querySelector(selector: string) {
+        if (selector === "[data-workspace-root]") {
+          return workspaceRoot
+        }
+
+        return null
+      },
+      getElementById(id: string) {
+        return elements.get(id) ?? null
+      }
+    },
+    window: {
+      matchMedia() {
+        return {
+          matches: true
+        }
+      }
+    },
+    fetch: fetchMock,
+    localStorage: {
+      getItem() {
+        return null
+      },
+      setItem() {
+        return undefined
+      }
+    },
+    Date: class extends Date {
+      static override now(): number {
+        return 1_733_000_000_000
+      }
+    }
+  })
+
+  runWorkspaceClientScripts(context)
+  await submitButton.handlers.get("click")?.()
+
+  assert.equal(
+    /(^|\s)is-celebrating(\s|$)/.test(workspaceStatusPanel.className),
+    false
+  )
+  assert.equal(
+    /(^|\s)is-celebrating-static(\s|$)/.test(workspaceStatusPanel.className),
+    true
+  )
+  assert.equal(
+    nextPresentationStatus.textContent,
+    "Days until next presentation: 2 day(s) (2024-12-02)."
+  )
 })
 
 test("workspace client script resets terminal output on each run", async () => {
@@ -392,7 +535,7 @@ test("workspace client script resets terminal output on each run", async () => {
     "Evaluation status: run code to generate feedback."
   )
   const sessionStatus = createFakeElement("Session status: active.")
-  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
   const debugShellOutput = createFakeElement(
     "$ ready: run your code to inspect runtime and evaluator output."
   )
@@ -501,7 +644,7 @@ test("workspace client script shows runtime stdout when run fails", async () => 
     "Evaluation status: run code to generate feedback."
   )
   const sessionStatus = createFakeElement("Session status: active.")
-  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
   const debugShellOutput = createFakeElement(
     "$ ready: run your code to inspect runtime and evaluator output."
   )
@@ -603,7 +746,7 @@ test("workspace client script auto-submits at 30-minute cap after timer start", 
     "Evaluation status: run code to generate feedback."
   )
   const sessionStatus = createFakeElement("Session status: active.")
-  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
   const sessionTimerStatus = createFakeElement(
     "Session timer: not started (30:00 limit)."
   )
@@ -766,7 +909,7 @@ test("workspace client script starts timer on first typed character in editor", 
     "Evaluation status: run code to generate feedback."
   )
   const sessionStatus = createFakeElement("Session status: active.")
-  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
   const sessionTimerStatus = createFakeElement(
     "Session timer: not started (30:00 limit)."
   )
@@ -861,7 +1004,7 @@ test("workspace client script keeps done-state messaging when anonymous sync fai
     "Evaluation status: run code to generate feedback."
   )
   const sessionStatus = createFakeElement("Session status: active.")
-  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
   const workspaceRoot = {
     getAttribute(name: string): string | null {
       if (name === "data-problem-id") {
@@ -968,7 +1111,7 @@ test("workspace client script keeps done-state messaging when anonymous sync fai
   assert.equal(sessionStatus.textContent, "Session status: done. Session complete.")
   assert.equal(
     scheduleStatus.textContent,
-    "Scheduling status: temporarily unavailable. Your session is still complete."
+    "Scheduling details: temporarily unavailable. Your session is still complete."
   )
   assert.equal(submitButton.disabled, false)
 })
@@ -982,7 +1125,7 @@ test("workspace client script inserts indentation when tab is pressed in editor"
     "Evaluation status: run code to generate feedback."
   )
   const sessionStatus = createFakeElement("Session status: active.")
-  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
   const workspaceRoot = {
     getAttribute(name: string): string | null {
       if (name === "data-problem-id") {
@@ -1065,7 +1208,7 @@ test("workspace client script renders and refreshes syntax highlighting with edi
     "Evaluation status: run code to generate feedback."
   )
   const sessionStatus = createFakeElement("Session status: active.")
-  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
   const workspaceRoot = {
     getAttribute(name: string): string | null {
       if (name === "data-problem-id") {
@@ -1148,7 +1291,7 @@ test("workspace client script toggles problem and question-bank tabs", async () 
     "Evaluation status: run code to generate feedback."
   )
   const sessionStatus = createFakeElement("Session status: active.")
-  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
   const workspaceTabProblem = createFakeElement()
   const workspaceTabLibrary = createFakeElement()
   const workspaceProblemTabPanel = createFakeElement()
@@ -1255,7 +1398,7 @@ test("workspace client script reveals hints in order with supportive messaging",
     "Evaluation status: run code to generate feedback."
   )
   const sessionStatus = createFakeElement("Session status: active.")
-  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
   hintTier2Button.disabled = true
   hintTier3Button.disabled = true
 
@@ -1396,7 +1539,7 @@ test("workspace question library supports fuzzy search, type filtering, and sugg
     "Evaluation status: run code to generate feedback."
   )
   const sessionStatus = createFakeElement("Session status: active.")
-  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
   const questionSearchInput = createFakeElement()
   const questionTypeFilter = createFakeElement("", "all")
   const questionLibraryResults = createFakeElement()
@@ -1664,7 +1807,7 @@ test("workspace question library card click navigates to selected problem path",
     "Evaluation status: run code to generate feedback."
   )
   const sessionStatus = createFakeElement("Session status: active.")
-  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
   const questionSearchInput = createFakeElement()
   const questionTypeFilter = createFakeElement("", "all")
   const questionLibraryResults = createFakeElement()
@@ -1784,7 +1927,7 @@ test("workspace client script marks visible test-case tabs as pass after success
     "Evaluation status: run code to generate feedback."
   )
   const sessionStatus = createFakeElement("Session status: active.")
-  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
   const debugShellOutput = createFakeElement(
     "$ ready: run your code to inspect runtime and evaluator output."
   )
@@ -1911,7 +2054,7 @@ test("workspace client script submits problem flags with structured reason metad
     "Evaluation status: run code to generate feedback."
   )
   const sessionStatus = createFakeElement("Session status: active.")
-  const scheduleStatus = createFakeElement("Scheduling status: pending submission.")
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
   const flagProblemButton = createFakeElement()
   const flagProblemReasonInput = createFakeElement("", "incorrect_output")
   const flagProblemNotesInput = createFakeElement(
