@@ -23,12 +23,14 @@
     "ace-builds": "^1.43.6",
     "express": "^5.1.0",
     "katex": "^0.16.28",
+    "markdown-it": "^14.1.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/express": "^5.0.3",
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^24.3.0",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",

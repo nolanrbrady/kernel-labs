@@ -17,6 +17,7 @@ import {
   ProblemFlagController
 } from "./controllers/index.js"
 import type {
+  AccountSessionSnapshot,
   FetchLike,
   ProgressSnapshotLike,
   TextNodeLike,
@@ -162,6 +163,7 @@ export function initializeProblemWorkspaceClient(): void {
   // ─── Storage Keys ───
 
   const localProgressStorageKey = "deepmlsr.anonymousProgress.v1"
+  const accountSessionStorageKey = "deepmlsr.accountSession.v1"
   const themeStorageKey = "deepmlsr.theme.v1"
 
   if (
@@ -176,6 +178,8 @@ export function initializeProblemWorkspaceClient(): void {
     return
   }
 
+  const activeProblemId = problemId
+
   const localProgressStore = new AnonymousProgressStore({
     storage: typeof localStorage !== "undefined" ? localStorage : null,
     storageKey: localProgressStorageKey,
@@ -184,6 +188,8 @@ export function initializeProblemWorkspaceClient(): void {
       return Date.now()
     }
   })
+  let activeAccountSession: AccountSessionSnapshot | null = readStoredAccountSession()
+  let accountProgressSnapshot: ProgressSnapshotLike | null = null
   const suggestTopicValidator = new SuggestTopicFormValidator()
   const questionCatalogModel = new QuestionCatalog({
     rawCatalog: workspaceRootNode.getAttribute("data-question-catalog"),
@@ -209,6 +215,36 @@ export function initializeProblemWorkspaceClient(): void {
     }
 
     node.textContent = text
+  }
+
+  function escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;")
+  }
+
+  function setHintContent(
+    node: TextNodeLike | null | undefined,
+    label: string,
+    plainText: string,
+    htmlText: string
+  ): void {
+    if (!node) {
+      return
+    }
+
+    const plainHintText = `${label} ${plainText}`
+    node.textContent = plainHintText
+
+    const htmlNode = node as TextNodeLike & { innerHTML?: string }
+    if (typeof htmlNode.innerHTML === "string") {
+      htmlNode.innerHTML = `<span class="hint-tier-label">${escapeHtml(
+        label
+      )}</span> ${htmlText}`
+    }
   }
 
   function getPrefersReducedMotion(): boolean {
@@ -248,6 +284,77 @@ export function initializeProblemWorkspaceClient(): void {
       return JSON.stringify(value, null, 2)
     } catch (_error) {
       return String(value)
+    }
+  }
+
+  function createEmptyProgressSnapshot(): ProgressSnapshotLike {
+    return {
+      version: 1,
+      completedProblemIds: [],
+      attemptHistory: []
+    }
+  }
+
+  function normalizeProgressSnapshot(value: unknown): ProgressSnapshotLike {
+    if (
+      typeof value !== "object" ||
+      value === null ||
+      !Array.isArray((value as { completedProblemIds?: unknown }).completedProblemIds) ||
+      !Array.isArray((value as { attemptHistory?: unknown }).attemptHistory)
+    ) {
+      return createEmptyProgressSnapshot()
+    }
+
+    const progress = value as ProgressSnapshotLike
+    return {
+      version: 1,
+      completedProblemIds: progress.completedProblemIds.filter(
+        (entry): entry is string => typeof entry === "string"
+      ),
+      attemptHistory: progress.attemptHistory
+    }
+  }
+
+  function canUseLocalStorage(): boolean {
+    return localProgressStore.canUseStorage()
+  }
+
+  function readStoredAccountSession(): AccountSessionSnapshot | null {
+    if (!canUseLocalStorage()) {
+      return null
+    }
+
+    try {
+      const rawSession = localStorage.getItem(accountSessionStorageKey)
+      if (!rawSession) {
+        return null
+      }
+
+      const parsed = JSON.parse(rawSession) as Partial<AccountSessionSnapshot>
+      if (
+        typeof parsed.sessionToken !== "string" ||
+        typeof parsed.account !== "object" ||
+        parsed.account === null ||
+        typeof parsed.account.accountId !== "string" ||
+        typeof parsed.account.email !== "string"
+      ) {
+        return null
+      }
+
+      if (
+        typeof parsed.expiresAt === "string" &&
+        Number.isNaN(Date.parse(parsed.expiresAt)) === false &&
+        Date.parse(parsed.expiresAt) <= Date.now()
+      ) {
+        if (typeof localStorage.removeItem === "function") {
+          localStorage.removeItem(accountSessionStorageKey)
+        }
+        return null
+      }
+
+      return parsed as AccountSessionSnapshot
+    } catch (_error) {
+      return null
     }
   }
 
@@ -389,7 +496,20 @@ export function initializeProblemWorkspaceClient(): void {
     sessionTimerStatus,
     timerCapMessage,
     prefersReducedMotion: getPrefersReducedMotion(),
-    api: apiAdapters,
+    api: {
+      submitSession: apiAdapters.submitSession,
+      requestSchedulerDecision: apiAdapters.requestSchedulerDecision,
+      syncAnonymousProgress(payload: ProgressSnapshotLike) {
+        if (activeAccountSession) {
+          return apiAdapters.syncAccountProgress(
+            payload,
+            activeAccountSession.sessionToken
+          )
+        }
+
+        return apiAdapters.syncAnonymousProgress(payload)
+      }
+    },
     appendDebugLine,
     readLocalProgress,
     persistAnonymousProgress,
@@ -558,13 +678,47 @@ export function initializeProblemWorkspaceClient(): void {
     return fallback
   }
 
-  const hintTierTextByTier: Record<number, string> = {
-    1: getHintText("data-hint-tier-1", "Check tensor shapes for q, k, and v first."),
-    2: getHintText("data-hint-tier-2", "Compute q @ k^T before masking and scaling."),
-    3: getHintText(
-      "data-hint-tier-3",
-      "Apply softmax(scores / sqrt(d_k)) before multiplying by v."
-    )
+  function getHintHtml(attributeName: string, fallbackText: string): string {
+    const value = workspaceRootNode.getAttribute(attributeName)
+    if (typeof value === "string" && value.length > 0) {
+      return value
+    }
+
+    return escapeHtml(fallbackText)
+  }
+
+  const tier1HintText = getHintText(
+    "data-hint-tier-1",
+    "Check tensor shapes for q, k, and v first."
+  )
+  const tier2HintText = getHintText(
+    "data-hint-tier-2",
+    "Compute q @ k^T before masking and scaling."
+  )
+  const tier3HintText = getHintText(
+    "data-hint-tier-3",
+    "Apply softmax(scores / sqrt(d_k)) before multiplying by v."
+  )
+
+  const hintTierContentByTier: Record<
+    number,
+    { label: string; text: string; html: string }
+  > = {
+    1: {
+      label: "Tier 1 (Conceptual):",
+      text: tier1HintText,
+      html: getHintHtml("data-hint-tier-1-html", tier1HintText)
+    },
+    2: {
+      label: "Tier 2 (Structural):",
+      text: tier2HintText,
+      html: getHintHtml("data-hint-tier-2-html", tier2HintText)
+    },
+    3: {
+      label: "Tier 3 (Near-code):",
+      text: tier3HintText,
+      html: getHintHtml("data-hint-tier-3-html", tier3HintText)
+    }
   }
   let revealedHintTier = 0
 
@@ -580,15 +734,30 @@ export function initializeProblemWorkspaceClient(): void {
     }
 
     if (tier === 1 && hintTier1Text) {
-      setText(hintTier1Text, `Tier 1 (Conceptual): ${hintTierTextByTier[1]}`)
+      setHintContent(
+        hintTier1Text,
+        hintTierContentByTier[1].label,
+        hintTierContentByTier[1].text,
+        hintTierContentByTier[1].html
+      )
     }
 
     if (tier === 2 && hintTier2Text) {
-      setText(hintTier2Text, `Tier 2 (Structural): ${hintTierTextByTier[2]}`)
+      setHintContent(
+        hintTier2Text,
+        hintTierContentByTier[2].label,
+        hintTierContentByTier[2].text,
+        hintTierContentByTier[2].html
+      )
     }
 
     if (tier === 3 && hintTier3Text) {
-      setText(hintTier3Text, `Tier 3 (Near-code): ${hintTierTextByTier[3]}`)
+      setHintContent(
+        hintTier3Text,
+        hintTierContentByTier[3].label,
+        hintTierContentByTier[3].text,
+        hintTierContentByTier[3].html
+      )
     }
 
     revealedHintTier = tier
@@ -617,18 +786,101 @@ export function initializeProblemWorkspaceClient(): void {
 
   // ─── Local Progress Persistence ───
 
-  function canUseLocalStorage(): boolean {
-    return localProgressStore.canUseStorage()
-  }
-
   function readLocalProgress(): ProgressSnapshotLike {
+    if (activeAccountSession) {
+      return accountProgressSnapshot ?? createEmptyProgressSnapshot()
+    }
+
     return localProgressStore.read()
   }
 
   function persistAnonymousProgress(
     correctness: WorkspaceCorrectness
   ): ProgressSnapshotLike {
+    if (activeAccountSession) {
+      const baseProgress = readLocalProgress()
+      const nextProgress: ProgressSnapshotLike = {
+        version: 1,
+        completedProblemIds: baseProgress.completedProblemIds.slice(),
+        attemptHistory: baseProgress.attemptHistory.slice()
+      }
+      nextProgress.attemptHistory.push({
+        problemId: activeProblemId,
+        correctness,
+        submittedAt: new Date(Date.now()).toISOString()
+      })
+
+      if (
+        (correctness === "pass" || correctness === "partial") &&
+        nextProgress.completedProblemIds.indexOf(activeProblemId) === -1
+      ) {
+        nextProgress.completedProblemIds.push(activeProblemId)
+      }
+
+      accountProgressSnapshot = nextProgress
+      return nextProgress
+    }
+
     return localProgressStore.persistAttempt(correctness)
+  }
+
+  async function hydrateAccountProgressIfSignedIn(): Promise<void> {
+    if (!activeAccountSession) {
+      return
+    }
+
+    const accountLabel =
+      activeAccountSession.account.displayName ||
+      activeAccountSession.account.email
+    setText(
+      sessionStatus,
+      `Session status: active. Signed in as ${accountLabel}. Loading saved progress...`
+    )
+
+    try {
+      const localAnonymousProgress = localProgressStore.read()
+      const hasLocalAnonymousProgress =
+        localAnonymousProgress.completedProblemIds.length > 0 ||
+        localAnonymousProgress.attemptHistory.length > 0
+
+      let resolvedProgress = createEmptyProgressSnapshot()
+      const accountProgressResult = await apiAdapters.loadAccountProgress(
+        activeAccountSession.sessionToken
+      )
+      if (accountProgressResult.ok) {
+        resolvedProgress = normalizeProgressSnapshot(accountProgressResult.payload)
+      }
+
+      if (hasLocalAnonymousProgress) {
+        const mergeResult = await apiAdapters.mergeAnonymousProgressIntoAccount(
+          localAnonymousProgress,
+          activeAccountSession.sessionToken
+        )
+        if (mergeResult.ok) {
+          resolvedProgress = normalizeProgressSnapshot(mergeResult.payload)
+          appendDebugLine("> merged local anonymous progress into account progress.")
+        }
+      }
+
+      accountProgressSnapshot = resolvedProgress
+      if (resolvedProgress.completedProblemIds.indexOf(activeProblemId) !== -1) {
+        setText(
+          sessionStatus,
+          `Session status: active. Signed in as ${accountLabel}. Previous completion found for this problem.`
+        )
+      } else {
+        setText(
+          sessionStatus,
+          `Session status: active. Signed in as ${accountLabel}.`
+        )
+      }
+    } catch (_error) {
+      accountProgressSnapshot = createEmptyProgressSnapshot()
+      setText(
+        sessionStatus,
+        `Session status: active. Signed in as ${accountLabel}. Progress sync unavailable right now.`
+      )
+    }
   }
 
   // ─── Theme Toggle ───
@@ -659,11 +911,24 @@ export function initializeProblemWorkspaceClient(): void {
 
   const localProgress = readLocalProgress()
   updateTimerDisplay(sessionLimitMs)
-  if (localProgress.completedProblemIds.indexOf(problemId) !== -1) {
+  if (
+    !activeAccountSession &&
+    localProgress.completedProblemIds.indexOf(problemId) !== -1
+  ) {
     setText(
       sessionStatus,
       "Session status: active. Previous anonymous completion found for this problem."
     )
+  }
+  if (activeAccountSession) {
+    const accountLabel =
+      activeAccountSession.account.displayName ||
+      activeAccountSession.account.email
+    setText(
+      sessionStatus,
+      `Session status: active. Signed in as ${accountLabel}.`
+    )
+    void hydrateAccountProgressIfSignedIn()
   }
   editorController.bind()
 

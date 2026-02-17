@@ -404,6 +404,208 @@ test("workspace client script wires run then submit and stores anonymous progres
   assert.equal(submitButton.disabled, false)
 })
 
+test("workspace client script syncs signed-in progress to account endpoints", async () => {
+  const runButton = createFakeElement()
+  const submitButton = createFakeElement()
+  const codeEditor = createFakeElement(
+    "",
+    "def scaled_dot_product_attention(q, k, v, mask=None):\n    return q"
+  )
+  const runStatus = createFakeElement("Run status: waiting for execution.")
+  const evaluationStatus = createFakeElement(
+    "Evaluation status: run code to generate feedback."
+  )
+  const sessionStatus = createFakeElement("Session status: active.")
+  const nextPresentationStatus = createFakeElement(
+    "Days until next presentation: pending submission."
+  )
+  const scheduleStatus = createFakeElement("Scheduling details: pending submission.")
+  const workspaceStatusPanel = createFakeElement()
+  workspaceStatusPanel.className = "status-panel"
+  const debugShellOutput = createFakeElement(
+    "$ ready: run your code to inspect runtime and evaluator output."
+  )
+  const workspaceRoot = {
+    getAttribute(name: string): string | null {
+      if (name === "data-problem-id") {
+        return "attention_scaled_dot_product_v1"
+      }
+
+      return null
+    }
+  }
+  const elements = new Map<string, FakeElement>([
+    ["run-button", runButton],
+    ["submit-button", submitButton],
+    ["starter-code-editor", codeEditor],
+    ["run-status", runStatus],
+    ["evaluation-status", evaluationStatus],
+    ["session-status", sessionStatus],
+    ["next-presentation-status", nextPresentationStatus],
+    ["schedule-status", scheduleStatus],
+    ["workspace-status-panel", workspaceStatusPanel],
+    ["debug-shell-output", debugShellOutput]
+  ])
+  const storedAnonymousProgressValue = JSON.stringify({
+    version: 1,
+    completedProblemIds: ["attention_scaled_dot_product_v1"],
+    attemptHistory: [
+      {
+        problemId: "attention_scaled_dot_product_v1",
+        correctness: "partial",
+        submittedAt: "2026-02-16T10:00:00.000Z"
+      }
+    ]
+  })
+  const storedSessionValue = JSON.stringify({
+    sessionToken: "sess_token_123",
+    account: {
+      accountId: "acct_123",
+      email: "signed-in@example.com",
+      displayName: "Signed In User",
+      createdAt: "2026-02-17T00:00:00.000Z",
+      optional: false
+    },
+    expiresAt: "2030-01-01T00:00:00.000Z"
+  })
+  const fetchCalls: FetchCall[] = []
+  const fetchMock = async (
+    input: string | URL | Request,
+    init?: RequestInit
+  ): Promise<Response> => {
+    const inputText =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+    fetchCalls.push({ input: inputText, init })
+
+    if (inputText === "/api/progress/account") {
+      if (init?.method === "GET") {
+        return createMockResponse({
+          version: 1,
+          completedProblemIds: [],
+          attemptHistory: []
+        })
+      }
+
+      return createMockResponse({
+        status: "ok"
+      })
+    }
+
+    if (inputText === "/api/progress/account/merge-anonymous") {
+      return createMockResponse({
+        version: 1,
+        completedProblemIds: ["attention_scaled_dot_product_v1"],
+        attemptHistory: [
+          {
+            problemId: "attention_scaled_dot_product_v1",
+            correctness: "partial",
+            submittedAt: "2026-02-16T10:00:00.000Z"
+          }
+        ]
+      })
+    }
+
+    if (inputText === "/api/runtime/run") {
+      return createMockResponse({
+        status: "success",
+        message: "Run complete on toy tensors.",
+        output: [
+          [0.6, -0.7],
+          [-0.2, 0.4]
+        ]
+      })
+    }
+
+    if (inputText === "/api/evaluator/evaluate") {
+      return createMockResponse({
+        correctness: "pass",
+        explanation: "Output matches expected fixture."
+      })
+    }
+
+    if (inputText === "/api/session/submit") {
+      return createMockResponse({
+        nextState: {
+          status: "done"
+        },
+        supportiveFeedback: "Session complete."
+      })
+    }
+
+    if (inputText === "/api/scheduler/decision") {
+      return createMockResponse({
+        nextIntervalDays: 3,
+        resurfacingPriority: 0.22
+      })
+    }
+
+    throw new Error(`Unexpected fetch input: ${inputText}`)
+  }
+  const context = createContext({
+    document: {
+      querySelector(selector: string) {
+        if (selector === "[data-workspace-root]") {
+          return workspaceRoot
+        }
+
+        return null
+      },
+      getElementById(id: string) {
+        return elements.get(id) ?? null
+      }
+    },
+    fetch: fetchMock,
+    localStorage: {
+      getItem(key: string): string | null {
+        if (key === "deepmlsr.anonymousProgress.v1") {
+          return storedAnonymousProgressValue
+        }
+        if (key === "deepmlsr.accountSession.v1") {
+          return storedSessionValue
+        }
+
+        return null
+      },
+      setItem() {
+        return undefined
+      }
+    },
+    Date: class extends Date {
+      static override now(): number {
+        return 1_733_000_000_000
+      }
+    }
+  })
+
+  runWorkspaceClientScripts(context)
+  await Promise.resolve()
+  await Promise.resolve()
+
+  await runButton.handlers.get("click")?.()
+  await submitButton.handlers.get("click")?.()
+
+  assert.equal(
+    fetchCalls.some((call) => call.input === "/api/progress/account"),
+    true
+  )
+  assert.equal(
+    fetchCalls.some((call) => call.input === "/api/progress/account/merge-anonymous"),
+    true
+  )
+  assert.equal(
+    fetchCalls.some((call) => call.input === "/api/progress/anonymous"),
+    false
+  )
+  assert.equal(
+    sessionStatus.textContent.includes("Session status: done."),
+    true
+  )
+})
+
 test("workspace client script uses static submission success state when reduced motion is preferred", async () => {
   const runButton = createFakeElement()
   const submitButton = createFakeElement()
@@ -1410,11 +1612,20 @@ test("workspace client script reveals hints in order with supportive messaging",
       if (name === "data-hint-tier-1") {
         return "Start from tensor shapes."
       }
+      if (name === "data-hint-tier-1-html") {
+        return "Start from <code>tensor shapes</code>."
+      }
       if (name === "data-hint-tier-2") {
         return "Compute q @ k^T before mask and scale."
       }
+      if (name === "data-hint-tier-2-html") {
+        return "Compute <code>q @ k^T</code> before mask and scale."
+      }
       if (name === "data-hint-tier-3") {
         return "Apply softmax(scores / sqrt(d_k)) then multiply by v."
+      }
+      if (name === "data-hint-tier-3-html") {
+        return "Apply <code>softmax(scores / sqrt(d_k))</code> then multiply by <code>v</code>."
       }
 
       return null
@@ -1496,6 +1707,7 @@ test("workspace client script reveals hints in order with supportive messaging",
     hintTier1Text.textContent,
     "Tier 1 (Conceptual): Start from tensor shapes."
   )
+  assert.equal(hintTier1Text.innerHTML.includes("<code>tensor shapes</code>"), true)
   assert.equal(hintTier1Button.disabled, true)
   assert.equal(hintTier2Button.disabled, false)
   assert.equal(hintTier3Button.disabled, true)
@@ -1516,6 +1728,7 @@ test("workspace client script reveals hints in order with supportive messaging",
     hintTier2Text.textContent,
     "Tier 2 (Structural): Compute q @ k^T before mask and scale."
   )
+  assert.equal(hintTier2Text.innerHTML.includes("<code>q @ k^T</code>"), true)
   assert.equal(hintTier3Button.disabled, false)
 
   await hintTier3Button.handlers.get("click")?.()
@@ -1523,6 +1736,11 @@ test("workspace client script reveals hints in order with supportive messaging",
     hintTier3Text.textContent,
     "Tier 3 (Near-code): Apply softmax(scores / sqrt(d_k)) then multiply by v."
   )
+  assert.equal(
+    hintTier3Text.innerHTML.includes("<code>softmax(scores / sqrt(d_k))</code>"),
+    true
+  )
+  assert.equal(hintTier3Text.innerHTML.includes("<code>v</code>"), true)
   assert.equal(
     hintStatus.textContent,
     "All hint tiers revealed. Submit whenever you are ready."

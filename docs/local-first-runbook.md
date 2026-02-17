@@ -46,15 +46,23 @@ This runbook defines how to operate the MVP locally and the minimal path to serv
 ## Runtime Environment Variables
 - `PORT`: server port (default `3000`)
 - `ANON_PROGRESS_FILE`: override anonymous progress file location
+- `ACCOUNT_STORE_FILE`: override persistent account directory file location
 
 ## Core Endpoints
 - `GET /`: editor-first workspace
+- `GET /auth/create-account`: account creation page (optional, non-blocking)
+- `GET /auth/sign-in`: sign-in page for returning users
 - `GET /health`: health check
+- `POST /api/auth/create-account`: create persistent account credentials
+- `POST /api/auth/sign-in`: sign in to an existing account and receive session token
+- `POST /api/auth/create-optional-account`: legacy optional account API (non-blocking)
 - `POST /api/runtime/run`: execute starter code against toy inputs
 - `POST /api/evaluator/evaluate`: evaluator result (pass/partial/fail)
 - `POST /api/session/submit`: submission transition to done state
 - `POST /api/session/timer`: 30-minute cap enforcement
 - `GET/POST /api/progress/anonymous`: anonymous progress read/write
+- `GET/POST /api/progress/account`: account progress read/write (requires Bearer session token)
+- `POST /api/progress/account/merge-anonymous`: merge browser anonymous progress into account progress
 - `POST /api/progress/sync-merge`: anonymous-to-account progress merge
 - `POST /api/scheduler/decision`: interval + priority calculation
 - `POST /api/scheduler/plan`: one-resurfaced-per-session planning
@@ -68,6 +76,7 @@ This runbook defines how to operate the MVP locally and the minimal path to serv
 2. Configure environment:
    - set `PORT`
    - set writable `ANON_PROGRESS_FILE` path
+   - set writable `ACCOUNT_STORE_FILE` path
 3. Expose `GET /health` for platform health checks.
 4. Place behind a basic reverse proxy/load balancer if needed.
 

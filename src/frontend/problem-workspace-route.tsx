@@ -1,5 +1,6 @@
 import { type ReactElement } from "react"
 import katex from "katex"
+import MarkdownIt from "markdown-it"
 
 export type QuestionLibraryItem = {
   id: string
@@ -78,6 +79,34 @@ function renderFormulaMathml(expression: string): string {
     throwOnError: false,
     strict: "ignore"
   })
+}
+
+const markdownRenderer = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true
+}).disable(["image"])
+
+function renderMarkdownBlock(markdownSource: string): string {
+  const normalizedSource =
+    typeof markdownSource === "string" ? markdownSource.trim() : ""
+
+  if (normalizedSource.length === 0) {
+    return ""
+  }
+
+  return markdownRenderer.render(normalizedSource)
+}
+
+function renderMarkdownInline(markdownSource: string): string {
+  const normalizedSource =
+    typeof markdownSource === "string" ? markdownSource.trim() : ""
+
+  if (normalizedSource.length === 0) {
+    return ""
+  }
+
+  return markdownRenderer.renderInline(normalizedSource)
 }
 
 function toStableCaseId(value: string): string {
@@ -269,6 +298,17 @@ export function ProblemWorkspaceScreen(props: {
       id: uniqueId
     }
   })
+  const conceptDescriptionHtml = renderMarkdownBlock(problemConceptDescription)
+  const problemGoalHtml = renderMarkdownBlock(problemGoal)
+  const inputSpecificationHtml = renderMarkdownBlock(inputSpecification)
+  const expectedOutputSpecificationHtml = renderMarkdownBlock(
+    expectedOutputSpecification
+  )
+  const hintTierHtml = {
+    tier1: renderMarkdownInline(problemHints.tier1),
+    tier2: renderMarkdownInline(problemHints.tier2),
+    tier3: renderMarkdownInline(problemHints.tier3)
+  }
 
   return (
     <main
@@ -280,6 +320,9 @@ export function ProblemWorkspaceScreen(props: {
       data-hint-tier-1={problemHints.tier1}
       data-hint-tier-2={problemHints.tier2}
       data-hint-tier-3={problemHints.tier3}
+      data-hint-tier-1-html={hintTierHtml.tier1}
+      data-hint-tier-2-html={hintTierHtml.tier2}
+      data-hint-tier-3-html={hintTierHtml.tier3}
       data-question-catalog={JSON.stringify(visibleQuestionCatalog)}
       data-visible-test-case-ids={JSON.stringify(
         normalizedVisibleTestCases.map((testCase) => {
@@ -325,7 +368,12 @@ export function ProblemWorkspaceScreen(props: {
             <p className="problem-eyebrow">Problem</p>
             <h1 className="problem-title">{route.problem.title}</h1>
           </div>
-          <p className="problem-goal">{problemGoal}</p>
+          <div
+            className="problem-goal markdown-content"
+            dangerouslySetInnerHTML={{
+              __html: problemGoalHtml
+            }}
+          />
           <div className="problem-session-bar">
             <p className="session-timer-status" id="session-timer-status">
               Session timer: not started (30:00 limit).
@@ -392,9 +440,12 @@ export function ProblemWorkspaceScreen(props: {
             <section className="problem-context" aria-label="problem-context">
               <details className="context-item" open>
                 <summary>Concept Background</summary>
-                <div className="context-body">
-                  <p>{problemConceptDescription}</p>
-                </div>
+                <div
+                  className="context-body markdown-content"
+                  dangerouslySetInnerHTML={{
+                    __html: conceptDescriptionHtml
+                  }}
+                />
               </details>
               <details className="context-item">
                 <summary>Formulas</summary>
@@ -419,24 +470,46 @@ export function ProblemWorkspaceScreen(props: {
                 <div className="context-body">
                   <ul className="context-list">
                     {architectureUses.map((usage) => {
-                      return <li key={usage}>{usage}</li>
+                      return (
+                        <li
+                          key={usage}
+                          dangerouslySetInnerHTML={{
+                            __html: renderMarkdownInline(usage)
+                          }}
+                        />
+                      )
                     })}
                   </ul>
                 </div>
               </details>
               <details className="context-item">
                 <summary>Input Shape And Constraints</summary>
-                <div className="context-body">
-                  <p>{inputSpecification}</p>
-                </div>
+                <div
+                  className="context-body markdown-content"
+                  dangerouslySetInnerHTML={{
+                    __html: inputSpecificationHtml
+                  }}
+                />
               </details>
               <details className="context-item">
                 <summary>Expected Outputs And Evaluation</summary>
                 <div className="context-body">
-                  <p>{expectedOutputSpecification}</p>
+                  <div
+                    className="markdown-content"
+                    dangerouslySetInnerHTML={{
+                      __html: expectedOutputSpecificationHtml
+                    }}
+                  />
                   <ul className="context-list">
                     {evaluationChecklist.map((criterion) => {
-                      return <li key={criterion}>{criterion}</li>
+                      return (
+                        <li
+                          key={criterion}
+                          dangerouslySetInnerHTML={{
+                            __html: renderMarkdownInline(criterion)
+                          }}
+                        />
+                      )
                     })}
                   </ul>
                 </div>

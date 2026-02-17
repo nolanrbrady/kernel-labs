@@ -29,7 +29,8 @@ test("editor-first screen renders starter code with run/submit and account CTA",
     id: "normalization_layernorm_v1",
     title: "Implement LayerNorm Forward Pass",
     category: "Normalization",
-    goal: "Normalize each row and keep outputs finite.",
+    goal:
+      "Write `layer_norm_forward(x, gamma, beta, eps)` that normalizes each row of a 2D toy tensor over the last dimension, then applies elementwise scale (`gamma`) and shift (`beta`) with correct broadcasting.",
     conceptDescription:
       "LayerNorm centers and scales hidden activations per token across feature dimensions.",
     inputSpecification:
@@ -192,4 +193,42 @@ test("editor-first screen renders starter code with run/submit and account CTA",
   assert.equal(markup.includes("question-library-item-active-tag"), true)
   assert.equal(markup.includes("[Normalization] normalization_layernorm_v1 - 25m"), true)
   assert.equal(markup.includes("[Attention] attention_scaled_dot_product_v1 - 30m"), true)
+  assert.equal(
+    markup.includes("<code>layer_norm_forward(x, gamma, beta, eps)</code>"),
+    true
+  )
+  assert.equal(markup.includes("<code>gamma</code>"), true)
+  assert.equal(markup.includes("<code>beta</code>"), true)
+})
+
+test("workspace right-column context renders markdown safely", () => {
+  const route = createEditorFirstLandingRoute({
+    id: "attention_markdown_rendering_v1",
+    title: "Markdown Rendering Validation",
+    starterCode: `def solve(x):
+    return x`,
+    conceptDescription:
+      "Use `scores` before normalization and treat `<script>alert(1)</script>` as text.",
+    inputSpecification:
+      "- `q`: toy tensor shape `[seq_len, d_k]`\n- `mask`: optional additive matrix",
+    expectedOutputSpecification:
+      "`context` preserves shape and remains finite.",
+    architectureUses: ["`QK^T` attention logits appear in transformer blocks."],
+    evaluationChecklist: ["`output.shape` matches expected dimensions."],
+    hints: {
+      tier1: "Start from `q @ k.T`.",
+      tier2: "Scale by `sqrt(d_k)`.",
+      tier3: "Apply `softmax` then multiply by `v`."
+    }
+  })
+
+  const markup = renderToStaticMarkup(<ProblemWorkspaceScreen route={route} />)
+
+  assert.equal(markup.includes("<code>scores</code>"), true)
+  assert.equal(markup.includes("<code>q</code>"), true)
+  assert.equal(markup.includes("<code>context</code>"), true)
+  assert.equal(markup.includes("<script>alert(1)</script>"), false)
+  assert.equal(markup.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), true)
+  assert.equal(markup.includes("data-hint-tier-1-html"), true)
+  assert.equal(markup.includes("&lt;code&gt;q @ k.T&lt;/code&gt;"), true)
 })

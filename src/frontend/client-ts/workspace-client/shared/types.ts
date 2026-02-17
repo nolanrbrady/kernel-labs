@@ -22,6 +22,20 @@ export type ProgressSnapshotLike = {
   [key: string]: unknown
 }
 
+export type AccountIdentity = {
+  accountId: string
+  email: string
+  displayName: string | null
+  createdAt: string
+  optional: false
+}
+
+export type AccountSessionSnapshot = {
+  sessionToken: string
+  account: AccountIdentity
+  expiresAt?: string | null
+}
+
 export type FetchLike = (
   input: string | URL | Request,
   init?: RequestInit

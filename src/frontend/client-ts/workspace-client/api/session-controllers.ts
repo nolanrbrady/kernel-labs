@@ -40,6 +40,17 @@ export type WorkspaceApiAdapters = {
   syncAnonymousProgress: (
     payload: ProgressSnapshotLike
   ) => Promise<ApiEnvelope<JsonMap>>
+  loadAccountProgress: (
+    sessionToken: string
+  ) => Promise<ApiEnvelope<ProgressSnapshotLike>>
+  syncAccountProgress: (
+    payload: ProgressSnapshotLike,
+    sessionToken: string
+  ) => Promise<ApiEnvelope<JsonMap>>
+  mergeAnonymousProgressIntoAccount: (
+    payload: ProgressSnapshotLike,
+    sessionToken: string
+  ) => Promise<ApiEnvelope<ProgressSnapshotLike>>
   requestSchedulerDecision: (
     payload: SchedulerDecisionRequestPayload
   ) => Promise<ApiEnvelope<SchedulerDecisionResponsePayload>>
@@ -104,12 +115,34 @@ type SubmissionControllerOptions = {
 async function postJson<TPayload>(
   fetchImpl: FetchLike,
   endpoint: string,
-  payload: unknown
+  payload: unknown,
+  options: { headers?: Record<string, string> } = {}
 ): Promise<ApiEnvelope<TPayload>> {
   const response = await fetchImpl(endpoint, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...options.headers
+    },
     body: JSON.stringify(payload)
+  })
+
+  const responsePayload = (await response.json()) as TPayload
+  return {
+    ok: response.ok,
+    status: response.status,
+    payload: responsePayload
+  }
+}
+
+async function getJson<TPayload>(
+  fetchImpl: FetchLike,
+  endpoint: string,
+  options: { headers?: Record<string, string> } = {}
+): Promise<ApiEnvelope<TPayload>> {
+  const response = await fetchImpl(endpoint, {
+    method: "GET",
+    headers: options.headers ?? {}
   })
 
   const responsePayload = (await response.json()) as TPayload
@@ -157,6 +190,38 @@ export function createWorkspaceApiAdapters(
     },
     syncAnonymousProgress(payload) {
       return postJson<JsonMap>(fetchImpl, "/api/progress/anonymous", payload)
+    },
+    loadAccountProgress(sessionToken) {
+      return getJson<ProgressSnapshotLike>(
+        fetchImpl,
+        "/api/progress/account",
+        {
+          headers: {
+            authorization: `Bearer ${sessionToken}`
+          }
+        }
+      )
+    },
+    syncAccountProgress(payload, sessionToken) {
+      return postJson<JsonMap>(fetchImpl, "/api/progress/account", payload, {
+        headers: {
+          authorization: `Bearer ${sessionToken}`
+        }
+      })
+    },
+    mergeAnonymousProgressIntoAccount(payload, sessionToken) {
+      return postJson<ProgressSnapshotLike>(
+        fetchImpl,
+        "/api/progress/account/merge-anonymous",
+        {
+          anonymousProgress: payload
+        },
+        {
+          headers: {
+            authorization: `Bearer ${sessionToken}`
+          }
+        }
+      )
     },
     requestSchedulerDecision(payload) {
       return postJson<SchedulerDecisionResponsePayload>(
