@@ -772,6 +772,828 @@ const SEED_PROBLEM_PACK_V1: SeedProblemDefinition[] = [
     torch_version_target: "2.0+",
     learning_context:
       "Where this shows up: RoPE is the default positional encoding in many modern LLMs; the core operation is a per-token pairwise rotation of q/k channels."
+  },
+  {
+    id: "normalization_batchnorm_forward_train_v1",
+    title: "Implement BatchNorm Forward Pass (Training Mode)",
+    category: "Normalization",
+    concept_description:
+      "BatchNorm normalizes activations using statistics computed across the batch for each feature. Unlike LayerNorm (which normalizes each example independently across features), BatchNorm couples examples in a batch and changes behavior between training and inference due to running statistics. This toy problem focuses on the forward pass in training mode only: compute per-feature mean/variance across the batch, normalize, then apply scale (gamma) and shift (beta) with correct broadcasting.",
+    goal:
+      "Write `batch_norm_forward_train(x, gamma, beta, eps)` for a 2D toy tensor `x` shaped `[batch, features]`. Compute `mean` and `var` across the batch dimension for each feature (ddof=0), normalize `x_hat = (x - mean) / sqrt(var + eps)`, and return `y = x_hat * gamma + beta` with `gamma`/`beta` broadcast across the batch. Use only toy tensors (no datasets, no training loops) and return a finite 2D output.",
+    starter_code:
+      "def batch_norm_forward_train(x, gamma, beta, eps=1e-5):\n    \"\"\"BatchNorm forward pass (training mode) for a 2D toy tensor.\n\n    Shapes:\n      x: [batch, features]\n      gamma: [features]\n      beta: [features]\n\n    Semantics:\n      mean = mean(x, axis=0)\n      var = mean((x - mean)^2, axis=0)  # ddof=0\n      x_hat = (x - mean) / sqrt(var + eps)\n      y = x_hat * gamma + beta\n\n    Notes:\n      - Normalize across the batch dimension (axis=0).\n      - Use eps inside sqrt for stability.\n      - Return a 2D tensor with the same shape as x.\n    \"\"\"\n    # TODO: implement\n    pass",
+    inputs: {
+      tensor_shapes: ["x: [3, 4]", "gamma: [4]", "beta: [4]", "eps: scalar"],
+      datatypes: ["float32"],
+      constraints: [
+        "toy tensors only (small fixed sizes)",
+        "no dataset usage, no training loop",
+        "normalize per feature across the batch dimension (axis=0)",
+        "use epsilon (`eps`) for numerical stability"
+      ]
+    },
+    expected_output: {
+      shape: "[3, 4]",
+      numerical_properties: [
+        "all values finite (no NaN/Inf)",
+        "same shape as input x",
+        "per-feature normalized activations (before affine) have ~0 mean and ~1 variance across the batch",
+        "gamma/beta broadcasting applies feature-wise scale and shift"
+      ]
+    },
+    evaluation_logic: {
+      checks: [
+        "shape correctness ([batch, features])",
+        "per-feature normalization sanity across batch axis",
+        "gamma/beta broadcasting correctness",
+        "numerical sanity (finite, stable eps usage)"
+      ],
+      rationale:
+        "BatchNorm bugs often come from normalizing over the wrong axis or misapplying broadcasting for gamma/beta. This isolates the training-mode forward computation on deterministic toy inputs so you can practice the exact semantics used inside CNN/MLP blocks without introducing running-stat bookkeeping or any training loop."
+    },
+    hints: {
+      tier1:
+        "BatchNorm is feature-wise across the batch: for `[batch, features]`, statistics are computed along axis=0 (over batch), not along the feature axis.",
+      tier2:
+        "Compute `mean` and `var` per feature with `keepdims=True` (or explicit reshaping) so subtraction and division broadcast correctly back to `[batch, features]`. Remember `eps` belongs inside the square root as `sqrt(var + eps)` for stability.",
+      tier3:
+        "Near-code: `mean = x.mean(axis=0, keepdims=True)`; `var = ((x - mean) ** 2).mean(axis=0, keepdims=True)`; `x_hat = (x - mean) / np.sqrt(var + eps)`; then apply the affine: `y = x_hat * gamma + beta` where `gamma`/`beta` are length `features` and broadcast across the batch."
+    },
+    resources: [
+      {
+        title: "Batch Normalization: Accelerating Deep Network Training",
+        url: "https://arxiv.org/abs/1502.03167"
+      },
+      {
+        title: "PyTorch BatchNorm1d Docs",
+        url: "https://pytorch.org/docs/stable/generated/torch.nn.BatchNorm1d.html"
+      }
+    ],
+    prerequisites: [
+      "Mean/variance computation along a specific axis",
+      "Broadcasting a 1D vector across a batch dimension",
+      "Numerical stability via epsilon inside a square root"
+    ],
+    common_pitfalls: [
+      "Normalizing over the wrong axis (axis=-1 would be LayerNorm-like, not BatchNorm)",
+      "Forgetting to broadcast mean/var back to `[batch, features]` when subtracting/dividing",
+      "Applying gamma/beta with the wrong shape (e.g. scaling per example instead of per feature)"
+    ],
+    estimated_time_minutes: 28,
+    problem_version: 1,
+    torch_version_target: "2.0+",
+    learning_context:
+      "Where this shows up: classic CNN/MLP pipelines and many legacy architectures rely on BatchNorm; being fluent in axis semantics helps you debug training/inference mismatches and shape bugs quickly."
+  },
+  {
+    id: "normalization_rmsnorm_forward_v1",
+    title: "Implement RMSNorm Forward Pass",
+    category: "Normalization",
+    concept_description:
+      "RMSNorm is a LayerNorm-like normalization used in many modern LLMs. It normalizes by the root-mean-square of activations across the feature dimension, without subtracting the mean. This changes invariances and can be faster/simpler in practice. This toy problem focuses on the forward math: compute per-row RMS, divide, and apply a learned scale vector (gamma) with correct broadcasting and epsilon handling.",
+    goal:
+      "Write `rms_norm_forward(x, gamma, eps)` for a 2D toy tensor `x` shaped `[batch, hidden]`. Compute `rms = sqrt(mean(x^2, axis=-1) + eps)` per row, return `y = (x / rms) * gamma` where `gamma` is length `hidden` and broadcasts across the batch. Use only toy tensors and ensure outputs are finite and deterministic.",
+    starter_code:
+      "def rms_norm_forward(x, gamma, eps=1e-8):\n    \"\"\"RMSNorm over the last dimension for a 2D toy tensor.\n\n    Semantics (per row):\n      rms = sqrt(mean(x^2) + eps)\n      y = (x / rms) * gamma\n\n    `gamma` is 1D of length hidden_dim and broadcasts across batch.\n    \"\"\"\n    # TODO: implement\n    pass",
+    inputs: {
+      tensor_shapes: ["x: [2, 4]", "gamma: [4]", "eps: scalar"],
+      datatypes: ["float32"],
+      constraints: [
+        "toy tensors only (small fixed sizes)",
+        "no dataset usage, no training loop",
+        "normalize per row across the last dimension (hidden/features)",
+        "use epsilon (`eps`) for numerical stability"
+      ]
+    },
+    expected_output: {
+      shape: "[2, 4]",
+      numerical_properties: [
+        "all values finite (no NaN/Inf)",
+        "same shape as input x",
+        "per-row RMS of the normalized activations is ~1 (before applying gamma)",
+        "gamma broadcasting applies feature-wise scaling"
+      ]
+    },
+    evaluation_logic: {
+      checks: [
+        "shape correctness ([batch, hidden])",
+        "per-row RMS normalization sanity",
+        "gamma broadcasting correctness",
+        "numerical sanity (finite values, eps usage)"
+      ],
+      rationale:
+        "RMSNorm is easy to implement but easy to get subtly wrong (axis choice, forgetting the square inside the mean, or misbroadcasting gamma). This problem isolates those semantics on deterministic toy tensors so later Transformer block exercises can assume you are fluent with RMS-based normalization."
+    },
+    hints: {
+      tier1:
+        "RMSNorm is per-row normalization across features: for `[batch, hidden]`, reduce along the last axis (axis=-1) and do not subtract the mean.",
+      tier2:
+        "Compute RMS from squared values (not absolute values): `rms = sqrt(mean(x**2) + eps)`. Use `keepdims=True` (or an explicit reshape) so `x / rms` broadcasts back to `[batch, hidden]`, then apply feature-wise scaling with `gamma` (a 1D vector of length hidden) which broadcasts across the batch.",
+      tier3:
+        "Near-code: `rms = np.sqrt(np.mean(x * x, axis=-1, keepdims=True) + eps)`; `x_hat = x / rms`; `y = x_hat * gamma`. Sanity-check 1: `y.shape == x.shape`. Sanity-check 2 (before gamma): `np.mean(x_hat**2, axis=-1)` should be close to 1 for each row, and adding eps prevents division-by-zero on all-zero rows."
+    },
+    resources: [
+      {
+        title: "Root Mean Square Layer Normalization",
+        url: "https://arxiv.org/abs/1910.07467"
+      },
+      {
+        title: "PyTorch RMSNorm (torch.nn.RMSNorm) Docs",
+        url: "https://pytorch.org/docs/stable/generated/torch.nn.RMSNorm.html"
+      }
+    ],
+    prerequisites: [
+      "Mean reduction across an axis with keepdims/broadcasting",
+      "Elementwise operations on 2D tensors",
+      "Numerical stability with epsilon"
+    ],
+    common_pitfalls: [
+      "Forgetting to square x before averaging (RMS requires mean of squares)",
+      "Normalizing across the wrong axis (axis=0 would couple batch elements)",
+      "Applying gamma with the wrong shape (must scale features, not rows)"
+    ],
+    estimated_time_minutes: 22,
+    problem_version: 1,
+    torch_version_target: "2.0+",
+    learning_context:
+      "Where this shows up: many LLMs replace LayerNorm with RMSNorm; the core operation is a per-token per-feature rescaling driven by RMS statistics."
+  },
+  {
+    id: "mlp_gelu_tanh_approx_v1",
+    title: "Implement GELU (Tanh Approx) Activation",
+    category: "MLP",
+    concept_description:
+      "GELU (Gaussian Error Linear Unit) is a smooth activation used in many Transformer MLP blocks. Compared to ReLU, it is differentiable everywhere and behaves like an input-dependent gate: large positive values pass through nearly unchanged while large negative values are pushed toward zero smoothly. This problem uses the common tanh-based approximation so you can implement GELU without special functions, focusing on elementwise math and numerical stability on toy tensors.",
+    goal:
+      "Write `gelu_tanh(x)` that applies the tanh approximation to GELU elementwise on a 2D toy tensor `x`. Use `gelu(x) = 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))` and return a 2D output with the same shape as `x`, with finite deterministic values.",
+    starter_code:
+      "def gelu_tanh(x):\n    \"\"\"GELU using the common tanh approximation (elementwise).\n\n    Use:\n      gelu(x) = 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))\n\n    x is a 2D toy tensor shaped [batch, hidden].\n    \"\"\"\n    # TODO: implement\n    pass",
+    inputs: {
+      tensor_shapes: ["x: [2, 4]", "x: [3, 2]"],
+      datatypes: ["float32"],
+      constraints: [
+        "toy tensors only (small fixed sizes)",
+        "no dataset usage, no training loop",
+        "apply the function elementwise (no reductions)",
+        "output must preserve input shape"
+      ]
+    },
+    expected_output: {
+      shape: "[2, 4]",
+      numerical_properties: [
+        "all values finite (no NaN/Inf)",
+        "same shape as input x",
+        "large positive inputs map to outputs close to x",
+        "large negative inputs map to outputs close to 0 (smoothly)"
+      ]
+    },
+    evaluation_logic: {
+      checks: [
+        "shape correctness (output matches input shape)",
+        "elementwise tanh-approx formula correctness",
+        "numerical sanity (finite values)",
+        "determinism on fixed toy inputs"
+      ],
+      rationale:
+        "GELU appears in essentially every standard Transformer MLP. Implementing it once builds comfort with the exact approximation used in many codebases and avoids common mistakes like missing the cubic term, misplacing constants, or accidentally applying a reduction instead of an elementwise transform."
+    },
+    hints: {
+      tier1:
+        "This is an elementwise activation: the output should have the same shape as x, with no sums or means over any axis.",
+      tier2:
+        "Implement the tanh approximation directly using constants `sqrt(2/pi)` and `0.044715`. Compute `x3 = x * x * x` and build the inner term `(x + 0.044715 * x3)` before multiplying by `sqrt(2/pi)` and applying `tanh`.",
+      tier3:
+        "Near-code: `c = np.sqrt(2.0 / np.pi)`; `inner = c * (x + 0.044715 * (x ** 3))`; `return 0.5 * x * (1.0 + np.tanh(inner))`. Sanity-check: for large positive x, tanh(inner) -> 1 so output -> x; for large negative x, tanh(inner) -> -1 so output -> 0."
+    },
+    resources: [
+      {
+        title: "Gaussian Error Linear Units (GELUs)",
+        url: "https://arxiv.org/abs/1606.08415"
+      },
+      {
+        title: "PyTorch GELU Docs",
+        url: "https://pytorch.org/docs/stable/generated/torch.nn.GELU.html"
+      }
+    ],
+    prerequisites: [
+      "Elementwise nonlinearities and broadcasting basics",
+      "Basic numerical functions (tanh, sqrt, power)",
+      "Reasoning about shapes for 2D tensors"
+    ],
+    common_pitfalls: [
+      "Dropping the cubic term `0.044715 * x^3` (changes the approximation noticeably)",
+      "Forgetting the `0.5 * x` factor or the `(1 + tanh(...))` structure",
+      "Applying GELU to a reduced scalar (mean/sum) instead of elementwise"
+    ],
+    estimated_time_minutes: 18,
+    problem_version: 1,
+    torch_version_target: "2.0+",
+    learning_context:
+      "Where this shows up: Transformer feed-forward blocks (MLPs/FFNs) routinely use GELU; being able to implement it helps you understand the exact gating behavior and reproduce reference implementations."
+  },
+  {
+    id: "mlp_swiglu_block_v1",
+    title: "Implement a SwiGLU MLP Block (SiLU Gate)",
+    category: "MLP",
+    concept_description:
+      "Modern Transformer MLPs often use gated activations like GLU, GEGLU, or SwiGLU. SwiGLU computes two linear projections: an 'up' branch and a 'gate' branch. The gate branch is passed through SiLU (a smooth sigmoid-gated linear unit), then multiplied elementwise with the up branch. This problem is a small, runnable unit that forces correct matrix multiply ordering, bias broadcasting, and the exact SiLU definition used in many LLM implementations.",
+    goal:
+      "Write `swiglu_block(x, w_gate, b_gate, w_up, b_up)` for toy 2D tensors. Compute `gate_pre = x @ w_gate + b_gate`, `up = x @ w_up + b_up`, then `gate = silu(gate_pre)` where `silu(t) = t * sigmoid(t)`. Return `gate * up` elementwise with shape `[batch, hidden]`, using only toy tensors (no datasets, no training loops).",
+    starter_code:
+      "def swiglu_block(x, w_gate, b_gate, w_up, b_up):\n    \"\"\"SwiGLU block: silu(x @ w_gate + b_gate) * (x @ w_up + b_up).\n\n    Shapes:\n      x: [batch, in_dim]\n      w_gate: [in_dim, hidden]\n      b_gate: [hidden]\n      w_up: [in_dim, hidden]\n      b_up: [hidden]\n\n    Returns:\n      y: [batch, hidden]\n    \"\"\"\n    # TODO: implement\n    pass",
+    inputs: {
+      tensor_shapes: ["x: [2, 3]", "w_gate: [3, 4]", "b_gate: [4]", "w_up: [3, 4]", "b_up: [4]"],
+      datatypes: ["float32"],
+      constraints: [
+        "toy tensors only (small fixed sizes)",
+        "no dataset usage, no training loop",
+        "bias must broadcast across batch",
+        "SiLU is defined as x * sigmoid(x) (not ReLU-like gating)"
+      ]
+    },
+    expected_output: {
+      shape: "[2, 4]",
+      numerical_properties: [
+        "all values finite (no NaN/Inf)",
+        "output shape matches `[batch, hidden]`",
+        "gate values are smooth and can be negative or positive (SiLU is not a hard clamp)",
+        "deterministic for fixed toy inputs"
+      ]
+    },
+    evaluation_logic: {
+      checks: [
+        "shape correctness ([batch, hidden])",
+        "bias broadcasting correctness",
+        "SiLU gating semantics correctness",
+        "numerical sanity (finite outputs)"
+      ],
+      rationale:
+        "Gated MLP blocks are a must-know primitive in modern LLMs. The most common implementation bugs are transposed matmuls, wrong bias broadcast, or using the wrong gate activation. This problem isolates the exact forward pass with deterministic toy tensors so you can build intuition before tackling full Transformer blocks."
+    },
+    hints: {
+      tier1:
+        "SwiGLU uses two linear projections from the same input: one branch is gated (with SiLU), then multiplied elementwise with the other branch.",
+      tier2:
+        "Compute `gate_pre = x @ w_gate + b_gate` and `up = x @ w_up + b_up` as separate `[batch, hidden]` matrices (bias is a 1D vector that broadcasts across batch). Implement `sigmoid(t) = 1 / (1 + exp(-t))`, then compute `silu(t) = t * sigmoid(t)` elementwise on `gate_pre`, and finally multiply elementwise: `y = silu(gate_pre) * up`.",
+      tier3:
+        "Near-code: `gate_pre = x @ w_gate + b_gate`; `up = x @ w_up + b_up`; `sig = 1.0 / (1.0 + np.exp(-gate_pre))`; `gate = gate_pre * sig`; `y = gate * up`. Sanity-check 1: `y.shape == up.shape == gate.shape == [batch, hidden]`. Sanity-check 2: if you set `w_gate` and `b_gate` to zeros, the gate becomes 0 and the output should be all zeros regardless of the up branch."
+    },
+    resources: [
+      {
+        title: "GLU Variants in Transformers (background via PaLM)",
+        url: "https://arxiv.org/abs/2204.02311"
+      },
+      {
+        title: "PyTorch SiLU Docs",
+        url: "https://pytorch.org/docs/stable/generated/torch.nn.SiLU.html"
+      }
+    ],
+    prerequisites: [
+      "Matrix multiplication shape rules for 2D tensors",
+      "Broadcasting a 1D bias across batch",
+      "Sigmoid and elementwise multiplication"
+    ],
+    common_pitfalls: [
+      "Using `sigmoid(gate_pre)` directly without multiplying by `gate_pre` (that is not SiLU)",
+      "Forgetting to add bias or adding it with the wrong broadcasting behavior",
+      "Multiplying the projections before applying SiLU (changes semantics)"
+    ],
+    estimated_time_minutes: 30,
+    problem_version: 1,
+    torch_version_target: "2.0+",
+    learning_context:
+      "Where this shows up: many LLM MLP blocks use gated activations (SwiGLU/GEGLU); implementing the forward pass correctly is a prerequisite for understanding model capacity and compute tradeoffs."
+  },
+  {
+    id: "mlp_moe_top1_routed_relu_v1",
+    title: "Implement a Tiny Top-1 MoE MLP (Token-Wise Routing)",
+    category: "MLP",
+    concept_description:
+      "Mixture-of-Experts (MoE) layers increase model capacity by routing each token to one (or a few) expert sub-networks. A gating network chooses which expert processes each token, typically based on per-token logits. This toy problem implements the simplest imperative form: top-1 routing with two experts, where each token is sent to exactly one expert and the output is the selected expert's MLP result. The goal is to practice deterministic routing, correct per-token slicing, and the expert-forward math under a small 2D toy tensor contract.",
+    goal:
+      "Write `moe_mlp_top1(x, gate_logits, w0, b0, w1, b1)` for toy 2D tensors. For each token row i, pick expert 0 or 1 using `argmax(gate_logits[i])` (ties resolve to the lowest index, consistent with NumPy). Compute the selected expert's output as `relu(x[i] @ w_e + b_e)` and place it into the corresponding output row. Return a 2D tensor shaped `[tokens, hidden]` with finite deterministic values, using toy tensors only (no datasets, no training loops).",
+    starter_code:
+      "def moe_mlp_top1(x, gate_logits, w0, b0, w1, b1):\n    \"\"\"Tiny top-1 MoE MLP with two experts.\n\n    Shapes:\n      x: [tokens, in_dim]\n      gate_logits: [tokens, 2]  # logits for expert 0 vs expert 1\n      w0: [in_dim, hidden]\n      b0: [hidden]\n      w1: [in_dim, hidden]\n      b1: [hidden]\n\n    Routing:\n      expert_i = argmax(gate_logits[i])  # ties -> lowest index\n\n    Expert forward:\n      out_i = relu(x[i] @ w_expert_i + b_expert_i)\n\n    Return:\n      out: [tokens, hidden]\n    \"\"\"\n    # TODO: implement\n    pass",
+    inputs: {
+      tensor_shapes: [
+        "x: [3, 2]",
+        "gate_logits: [3, 2]",
+        "w0: [2, 3]",
+        "b0: [3]",
+        "w1: [2, 3]",
+        "b1: [3]"
+      ],
+      datatypes: ["float32"],
+      constraints: [
+        "toy tensors only (small fixed sizes)",
+        "no dataset usage, no training loop",
+        "top-1 routing per token via argmax over two experts",
+        "use ReLU for the expert MLP activation (elementwise max(x, 0))"
+      ]
+    },
+    expected_output: {
+      shape: "[3, 3]",
+      numerical_properties: [
+        "all values finite (no NaN/Inf)",
+        "output shape is [tokens, hidden]",
+        "each token output comes from exactly one expert (no blending)",
+        "non-negative values after ReLU"
+      ]
+    },
+    evaluation_logic: {
+      checks: [
+        "shape correctness ([tokens, hidden])",
+        "routing correctness (token-wise top-1 expert selection)",
+        "expert affine + ReLU correctness",
+        "numerical sanity (finite outputs)"
+      ],
+      rationale:
+        "MoE layers combine two common failure modes: subtle routing errors (wrong argmax axis, mixing experts, or tie-handling differences) and standard MLP shape/bias mistakes. This toy top-1 two-expert setup keeps everything deterministic and runnable while still exercising the essential MoE mechanics needed to understand larger sparse expert models."
+    },
+    hints: {
+      tier1:
+        "Treat each token row independently: first choose an expert index from `gate_logits[i]`, then run only that expert for token i.",
+      tier2:
+        "Compute each expert's affine output as `x @ w + b` (bias broadcasts) and apply ReLU. Then for each token i, select the row from expert 0 output or expert 1 output based on `argmax(gate_logits[i])`.",
+      tier3:
+        "Near-code: `expert0 = relu(x @ w0 + b0)` and `expert1 = relu(x @ w1 + b1)`. Compute `routes = np.argmax(gate_logits, axis=-1)` which yields length `tokens`. Build `out` row-by-row: if `routes[i] == 0` take `expert0[i]` else take `expert1[i]`. Sanity-check: routes only contains 0/1 and output is non-negative due to ReLU."
+    },
+    resources: [
+      {
+        title: "Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer",
+        url: "https://arxiv.org/abs/1701.06538"
+      },
+      {
+        title: "PyTorch Mixture-of-Experts Tutorial Notes (routing concepts)",
+        url: "https://pytorch.org/docs/stable/index.html"
+      }
+    ],
+    prerequisites: [
+      "Argmax over the last axis and tie-handling intuition",
+      "Matrix multiplication and bias broadcasting",
+      "ReLU as an elementwise nonlinearity"
+    ],
+    common_pitfalls: [
+      "Taking argmax over the wrong axis (e.g. across tokens instead of experts)",
+      "Blending expert outputs instead of selecting exactly one (this problem is top-1, not soft routing)",
+      "Applying ReLU before adding bias (changes semantics)"
+    ],
+    estimated_time_minutes: 30,
+    problem_version: 1,
+    torch_version_target: "2.0+",
+    learning_context:
+      "Where this shows up: sparse MoE layers (Switch, GShard-style) route tokens to experts; understanding top-1 routing and per-token expert execution is the first step before adding capacity constraints, load balancing, and top-k routing."
+  },
+  {
+    id: "attention_causal_mask_additive_v1",
+    title: "Generate an Additive Causal Attention Mask",
+    category: "Attention",
+    concept_description:
+      "Causal self-attention enforces an autoregressive constraint: position i may not attend to positions j > i. A common implementation uses an additive mask (a bias matrix) added to attention logits before softmax, where masked entries are a large negative number so their probability mass becomes ~0. This problem isolates mask construction so later attention implementations can reuse a correct, deterministic causal mask.",
+    goal:
+      "Write `causal_mask(seq_len, masked_value)` that returns a 2D additive mask matrix of shape `[seq_len, seq_len]`. Entries on or below the diagonal must be 0, and entries strictly above the diagonal must be `masked_value` (a large negative number like -1e9). The mask must be deterministic, numeric, and suitable for `scores + mask` before a row-wise softmax.",
+    starter_code:
+      "def causal_mask(seq_len, masked_value=-1e9):\n    \"\"\"Return an additive causal mask of shape [seq_len, seq_len].\n\n    Rules:\n      - mask[i, j] = 0 if j <= i\n      - mask[i, j] = masked_value if j > i\n\n    This is used as: masked_scores = scores + mask\n    \"\"\"\n    # TODO: implement\n    pass",
+    inputs: {
+      tensor_shapes: ["seq_len: scalar", "masked_value: scalar"],
+      datatypes: ["float32"],
+      constraints: [
+        "toy tensors only (small fixed sizes)",
+        "no dataset usage, no training loop",
+        "mask is additive bias applied before softmax",
+        "use a large negative masked_value (e.g. -1e9) to suppress probability mass"
+      ]
+    },
+    expected_output: {
+      shape: "[3, 3]",
+      numerical_properties: [
+        "all values finite (no NaN/Inf)",
+        "diagonal and lower triangle are exactly 0",
+        "strictly upper triangle equals masked_value",
+        "deterministic for fixed seq_len and masked_value"
+      ]
+    },
+    evaluation_logic: {
+      checks: [
+        "shape correctness ([seq_len, seq_len])",
+        "upper-triangular masking correctness",
+        "diagonal/lower-triangular allowance correctness",
+        "numerical sanity (finite, large-negative mask values allowed)"
+      ],
+      rationale:
+        "Causal masking is foundational for autoregressive models and is frequently a source of off-by-one errors (masking the diagonal, or using the wrong triangle). By implementing the additive mask explicitly on a toy size, you lock in the correct semantics that later attention tasks depend on."
+    },
+    hints: {
+      tier1:
+        "The causal constraint is `j <= i` allowed and `j > i` blocked; think of the matrix as rows i (queries) and columns j (keys).",
+      tier2:
+        "Use a nested loop or vectorized indexing to fill a `[seq_len, seq_len]` matrix. The easiest mental model: start with zeros, then set entries where column index is greater than row index to `masked_value`.",
+      tier3:
+        "Near-code: initialize `mask = np.zeros((seq_len, seq_len), dtype=float)`; then for each `i` set `mask[i, i+1:] = masked_value`. Sanity-check: for `seq_len=3`, row 0 masks columns 1 and 2; row 1 masks column 2; row 2 masks nothing."
+    },
+    resources: [
+      {
+        title: "Attention Is All You Need (masking background)",
+        url: "https://arxiv.org/abs/1706.03762"
+      },
+      {
+        title: "PyTorch scaled_dot_product_attention Docs (mask semantics)",
+        url: "https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html"
+      }
+    ],
+    prerequisites: [
+      "Indexing a 2D matrix by row/column indices",
+      "Understanding additive masks applied before softmax",
+      "Basic attention terminology (queries/keys)"
+    ],
+    common_pitfalls: [
+      "Masking the diagonal (should be allowed; token can attend to itself)",
+      "Using the wrong triangle (lower vs upper) due to swapped i/j meaning",
+      "Returning a boolean mask instead of an additive numeric bias matrix"
+    ],
+    estimated_time_minutes: 16,
+    problem_version: 1,
+    torch_version_target: "2.0+",
+    learning_context:
+      "Where this shows up: GPT-style models rely on causal masks in every attention layer; constructing the correct additive mask is a basic building block for stable attention implementations."
+  },
+  {
+    id: "attention_masked_softmax_v1",
+    title: "Implement Stable Masked Softmax (Additive Mask)",
+    category: "Attention",
+    concept_description:
+      "Masked softmax is the workhorse used to turn attention logits into a probability distribution while enforcing constraints (padding masks, causal masks, span masks). The key is numerical stability: subtract the row-wise maximum before exponentiating to avoid overflow, and apply additive masks before the softmax so masked entries receive ~0 probability mass. This problem isolates masked softmax on a 2D toy matrix so you can get the exact semantics right.",
+    goal:
+      "Write `masked_softmax(scores, mask=None)` for 2D toy tensors shaped `[rows, cols]`. If `mask` is provided, it is an additive bias matrix of the same shape and must be added to `scores` before softmax. Compute a numerically stable softmax over the last axis (per row) and return the probability matrix with the same shape, with finite values and rows that sum to 1 (within tolerance).",
+    starter_code:
+      "def masked_softmax(scores, mask=None):\n    \"\"\"Row-wise stable softmax with an optional additive mask.\n\n    - scores: [rows, cols]\n    - mask: [rows, cols] additive bias (large negative to suppress), or None\n\n    Return probabilities with the same shape.\n    \"\"\"\n    # TODO: implement\n    pass",
+    inputs: {
+      tensor_shapes: ["scores: [3, 3]", "mask: [3, 3] optional (or None)"],
+      datatypes: ["float32"],
+      constraints: [
+        "toy tensors only (small fixed sizes)",
+        "no dataset usage, no training loop",
+        "mask is additive and applied before softmax",
+        "softmax must be numerically stable (subtract max before exp)"
+      ]
+    },
+    expected_output: {
+      shape: "[3, 3]",
+      numerical_properties: [
+        "all values finite (no NaN/Inf)",
+        "each row sums to ~1 (probability distribution)",
+        "masked positions receive ~0 probability mass when mask uses large negative bias",
+        "deterministic for fixed toy inputs"
+      ]
+    },
+    evaluation_logic: {
+      checks: [
+        "shape correctness ([rows, cols])",
+        "row-wise normalization sanity (rows sum to one)",
+        "masking correctness (masked logits suppressed)",
+        "numerical sanity (stable exp normalization)"
+      ],
+      rationale:
+        "Most attention correctness issues trace back to masked softmax: applying the mask after softmax, softmaxing over the wrong axis, or suffering overflow with large logits. This problem builds a stable, reusable masked softmax on tiny deterministic matrices so later attention problems focus on QK^T math rather than probability plumbing."
+    },
+    hints: {
+      tier1:
+        "Softmax is applied independently per row over the last axis; the output should have the same 2D shape as scores.",
+      tier2:
+        "If you have a mask, add it before softmax: `masked = scores + mask`. For numerical stability compute `shifted = masked - max(masked, axis=-1, keepdims=True)` before `exp`, then normalize by the row-wise sum of exponentials.",
+      tier3:
+        "Near-code: `logits = scores if mask is None else scores + mask`; `logits = logits - np.max(logits, axis=-1, keepdims=True)`; `exps = np.exp(logits)`; `probs = exps / np.sum(exps, axis=-1, keepdims=True)`; return `probs`. Sanity-check: each row sums to ~1 and masked entries are near 0 when mask uses -1e9."
+    },
+    resources: [
+      {
+        title: "Attention Is All You Need (softmax usage in attention)",
+        url: "https://arxiv.org/abs/1706.03762"
+      },
+      {
+        title: "PyTorch Softmax Docs",
+        url: "https://pytorch.org/docs/stable/generated/torch.nn.Softmax.html"
+      }
+    ],
+    prerequisites: [
+      "Softmax as a row-wise probability distribution",
+      "Numerical stability tricks (subtract max before exp)",
+      "Understanding additive masking (bias) before softmax"
+    ],
+    common_pitfalls: [
+      "Applying the mask after softmax (too late to suppress probability mass)",
+      "Softmaxing over the wrong axis (must normalize across columns per row)",
+      "Computing exp on large logits without subtracting the max (overflow/Inf)"
+    ],
+    estimated_time_minutes: 24,
+    problem_version: 1,
+    torch_version_target: "2.0+",
+    learning_context:
+      "Where this shows up: attention layers rely on stable masked softmax for both padding and causality; implementing it correctly is essential for reliable Transformer behavior."
+  },
+  {
+    id: "attention_split_heads_flat_v1",
+    title: "Implement Multi-Head Split (Flattened 2D View)",
+    category: "Attention",
+    concept_description:
+      "Multi-head attention reshapes a `[seq_len, d_model]` representation into multiple heads so each head attends in a lower-dimensional subspace. In real implementations this produces a 3D tensor, but this toy problem uses a flattened 2D view so it stays runnable under the 2D output contract: you split `d_model` into `num_heads` chunks of size `head_dim` and expose them as extra rows. This is an imperative shape-manipulation skill for attention implementations and debugging.",
+    goal:
+      "Write `split_heads_flat(x, num_heads)` where `x` has shape `[seq_len, d_model]` and `d_model` is divisible by `num_heads`. Return a 2D matrix of shape `[seq_len * num_heads, head_dim]` using token-major, head-minor ordering: row `i * num_heads + h` must equal the slice `x[i, h*head_dim:(h+1)*head_dim]`. Use only toy tensors and return a deterministic 2D output.",
+    starter_code:
+      "def split_heads_flat(x, num_heads):\n    \"\"\"Flattened multi-head split.\n\n    Input:\n      x: [seq_len, d_model]\n      num_heads: int\n\n    Output:\n      out: [seq_len * num_heads, head_dim]\n\n    Ordering (token-major):\n      out[i * num_heads + h] = x[i, h*head_dim:(h+1)*head_dim]\n    \"\"\"\n    # TODO: implement\n    pass",
+    inputs: {
+      tensor_shapes: ["x: [2, 4]", "num_heads: scalar"],
+      datatypes: ["float32"],
+      constraints: [
+        "toy tensors only (small fixed sizes)",
+        "no dataset usage, no training loop",
+        "d_model must be divisible by num_heads",
+        "follow the specified token-major row ordering exactly"
+      ]
+    },
+    expected_output: {
+      shape: "[4, 2]",
+      numerical_properties: [
+        "all values finite (no NaN/Inf)",
+        "output contains the same values as x, only reshaped/reordered",
+        "deterministic for fixed inputs",
+        "row ordering matches the token-major specification"
+      ]
+    },
+    evaluation_logic: {
+      checks: [
+        "shape correctness ([seq_len * num_heads, head_dim])",
+        "head slicing correctness (correct contiguous feature chunks)",
+        "row ordering correctness (token-major)",
+        "numerical sanity (finite values)"
+      ],
+      rationale:
+        "Most multi-head attention bugs are shape/order bugs: mixing head and token axes, slicing non-contiguous chunks, or using the wrong row ordering. This toy exercise makes the intended ordering explicit and deterministic so you can later map it to real 3D reshapes with confidence."
+    },
+    hints: {
+      tier1:
+        "You are not doing any math besides slicing and rearranging. The output should contain exactly the same numbers as x, just grouped into heads.",
+      tier2:
+        "Compute `head_dim = d_model // num_heads`. For each token row i, slice contiguous chunks of length head_dim from x: head 0 uses columns [0:head_dim], head 1 uses [head_dim:2*head_dim], etc. Append these slices as output rows in token-major order.",
+      tier3:
+        "Near-code: loop over `i in range(seq_len)` and `h in range(num_heads)`; slice `chunk = x[i, h*head_dim:(h+1)*head_dim]`; write it to `out[i*num_heads + h]`. Sanity-check with a small x where each column is unique so you can visually confirm the ordering."
+    },
+    resources: [
+      {
+        title: "Attention Is All You Need (multi-head attention overview)",
+        url: "https://arxiv.org/abs/1706.03762"
+      },
+      {
+        title: "The Annotated Transformer (multi-head shapes)",
+        url: "https://nlp.seas.harvard.edu/annotated-transformer/"
+      }
+    ],
+    prerequisites: [
+      "2D tensor shape reasoning ([seq_len, d_model])",
+      "Indexing and slicing contiguous feature chunks",
+      "Understanding head_dim = d_model / num_heads"
+    ],
+    common_pitfalls: [
+      "Swapping token-major and head-major order (rows end up permuted)",
+      "Slicing with the wrong head_dim (integer division mistakes)",
+      "Returning a 3D tensor instead of the specified flattened 2D view"
+    ],
+    estimated_time_minutes: 20,
+    problem_version: 1,
+    torch_version_target: "2.0+",
+    learning_context:
+      "Where this shows up: multi-head attention is everywhere in Transformers; debugging attention almost always involves being fluent in head splitting/merging semantics and axis ordering."
+  },
+  {
+    id: "rnn_gru_step_v1",
+    title: "Implement a GRU Single-Step Update",
+    category: "RNNs",
+    concept_description:
+      "GRUs (Gated Recurrent Units) extend vanilla RNNs by adding gates that control information flow: an update gate mixes the previous hidden state with a candidate state, and a reset gate controls how much of the previous state contributes to the candidate. Even if you primarily work with attention models, GRUs are a canonical example of gated state updates, elementwise nonlinearities, and shape-consistent recurrent computations.",
+    goal:
+      "Write `gru_step(x_t, h_prev, w_xz, w_hz, b_z, w_xr, w_hr, b_r, w_xn, w_hn, b_n)` that returns the next hidden state `h_next` for a single time step on toy 2D tensors. Use: `z = sigmoid(x_t@w_xz + h_prev@w_hz + b_z)`, `r = sigmoid(x_t@w_xr + h_prev@w_hr + b_r)`, `n = tanh(x_t@w_xn + (r*h_prev)@w_hn + b_n)`, and `h_next = (1 - z)*n + z*h_prev`. Return a finite `[batch, hidden]` output with correct broadcasting.",
+    starter_code:
+      "def gru_step(x_t, h_prev, w_xz, w_hz, b_z, w_xr, w_hr, b_r, w_xn, w_hn, b_n):\n    \"\"\"Single-step GRU update (no sequence loop).\n\n    Shapes:\n      x_t: [batch, input_dim]\n      h_prev: [batch, hidden_dim]\n      w_x*: [input_dim, hidden_dim]\n      w_h*: [hidden_dim, hidden_dim]\n      b_*: [hidden_dim]\n\n    Returns:\n      h_next: [batch, hidden_dim]\n    \"\"\"\n    # TODO: implement\n    pass",
+    inputs: {
+      tensor_shapes: [
+        "x_t: [2, 3]",
+        "h_prev: [2, 4]",
+        "w_xz: [3, 4]",
+        "w_hz: [4, 4]",
+        "b_z: [4]",
+        "w_xr: [3, 4]",
+        "w_hr: [4, 4]",
+        "b_r: [4]",
+        "w_xn: [3, 4]",
+        "w_hn: [4, 4]",
+        "b_n: [4]"
+      ],
+      datatypes: ["float32"],
+      constraints: [
+        "toy tensors only (small fixed sizes)",
+        "no dataset usage, no training loop",
+        "single-step recurrence only (no sequence iteration required)",
+        "use sigmoid for z/r and tanh for candidate n"
+      ]
+    },
+    expected_output: {
+      shape: "[2, 4]",
+      numerical_properties: [
+        "all values finite (no NaN/Inf)",
+        "output shape is [batch, hidden_dim]",
+        "gate values are in (0, 1) for finite inputs",
+        "deterministic for fixed toy inputs"
+      ]
+    },
+    evaluation_logic: {
+      checks: [
+        "shape correctness ([batch, hidden_dim])",
+        "gate computation sanity (sigmoid outputs in (0,1))",
+        "candidate and mixing formula correctness",
+        "numerical sanity (finite, stable nonlinearities)"
+      ],
+      rationale:
+        "GRU steps combine multiple affine projections, elementwise gates, and a final convex-like mixing of states. Implementation mistakes usually come from shape mismatches, forgetting elementwise multiplication for the reset gate, or mixing z with the wrong terms. This problem teaches the exact one-step forward semantics on deterministic toy tensors without introducing sequences or backpropagation."
+    },
+    hints: {
+      tier1:
+        "A GRU step computes two sigmoid gates (update z and reset r), then a tanh candidate n, then mixes n with h_prev using z.",
+      tier2:
+        "Compute the affine terms in explicit pieces so shapes are obvious: `xz = x_t @ w_xz`, `hz = h_prev @ w_hz` (both `[batch, hidden]`), then add bias `b_z` (broadcast across batch) before applying sigmoid to get z. Do the same for r using `w_xr`, `w_hr`, and `b_r`. For the candidate n, multiply `r * h_prev` elementwise before the recurrent projection with `w_hn`.",
+      tier3:
+        "Near-code: `z = sigmoid(x_t@w_xz + h_prev@w_hz + b_z)`; `r = sigmoid(x_t@w_xr + h_prev@w_hr + b_r)`; `n = tanh(x_t@w_xn + (r*h_prev)@w_hn + b_n)`; `h_next = (1.0 - z) * n + z * h_prev`. Sanity-check 1: z and r are in (0,1) for finite inputs. Sanity-check 2: when z is close to 1, `h_next` stays close to `h_prev`, and when z is close to 0, `h_next` stays close to the candidate n."
+    },
+    resources: [
+      {
+        title: "Learning Phrase Representations using RNN Encoder-Decoder (GRU introduction)",
+        url: "https://arxiv.org/abs/1406.1078"
+      },
+      {
+        title: "PyTorch GRU Docs",
+        url: "https://pytorch.org/docs/stable/generated/torch.nn.GRU.html"
+      }
+    ],
+    prerequisites: [
+      "Matrix multiplication and broadcasting for 2D tensors",
+      "Sigmoid and tanh nonlinearities",
+      "Elementwise multiplication for gating"
+    ],
+    common_pitfalls: [
+      "Using matrix multiplication instead of elementwise multiplication for `r * h_prev`",
+      "Forgetting to add biases (or adding them with incorrect broadcasting)",
+      "Mixing the update gate incorrectly (e.g. `z*n + (1-z)*h_prev` with swapped terms)"
+    ],
+    estimated_time_minutes: 30,
+    problem_version: 1,
+    torch_version_target: "2.0+",
+    learning_context:
+      "Where this shows up: GRUs are used in sequence modeling, time-series, and as gating inspiration for many modern architectures; a correct step implementation is a durable mental model for gated computation."
+  },
+  {
+    id: "adaptation_lora_merge_weights_v1",
+    title: "Merge LoRA Weights Into Base Weight (Inference Merge)",
+    category: "Adaptation & Efficiency",
+    concept_description:
+      "LoRA fine-tuning learns a low-rank update to an existing weight matrix: `W_eff = W + alpha * (A @ B)`. During inference you often want to merge the low-rank update into the base weight for simplicity or deployment. This toy problem focuses on the pure weight-space merge: given `W`, `A`, `B`, and a scalar `alpha`, compute the merged 2D weight matrix with correct shapes and determinism.",
+    goal:
+      "Write `merge_lora_weights(base_w, a, b, alpha)` that returns `base_w + alpha * (a @ b)`. `base_w` is shaped `[in_dim, out_dim]`, `a` is `[in_dim, rank]`, and `b` is `[rank, out_dim]`. Use toy tensors only and return a finite 2D matrix of shape `[in_dim, out_dim]` that matches the merged weight used in LoRA inference.",
+    starter_code:
+      "def merge_lora_weights(base_w, a, b, alpha):\n    \"\"\"Merge LoRA low-rank update into a base weight.\n\n    Shapes:\n      base_w: [in_dim, out_dim]\n      a: [in_dim, rank]\n      b: [rank, out_dim]\n      alpha: scalar\n\n    Return:\n      merged_w: [in_dim, out_dim] = base_w + alpha * (a @ b)\n    \"\"\"\n    # TODO: implement\n    pass",
+    inputs: {
+      tensor_shapes: ["base_w: [3, 3]", "a: [3, 2]", "b: [2, 3]", "alpha: scalar"],
+      datatypes: ["float32"],
+      constraints: [
+        "toy tensors only (small fixed sizes)",
+        "no dataset usage, no training loop",
+        "return merged weight matrix (not the projected outputs)",
+        "shapes must align as base_w + alpha*(a@b)"
+      ]
+    },
+    expected_output: {
+      shape: "[3, 3]",
+      numerical_properties: [
+        "all values finite (no NaN/Inf)",
+        "output shape equals base_w shape",
+        "alpha=0 returns exactly base_w",
+        "deterministic for fixed toy inputs"
+      ]
+    },
+    evaluation_logic: {
+      checks: [
+        "shape correctness ([in_dim, out_dim])",
+        "low-rank product shape and multiply correctness",
+        "alpha scaling correctness",
+        "numerical sanity (finite output)"
+      ],
+      rationale:
+        "Many LoRA discussions focus on the forward `x @ (W + alpha*A@B)` but deployment often needs a reliable weight merge. This problem teaches the exact merge computation, which is easy to implement but easy to get wrong if shapes or scaling are confused. A deterministic toy merge is also straightforward to regression-test."
+    },
+    hints: {
+      tier1:
+        "This is weight-space math: you are producing a merged weight matrix, not applying it to an input x.",
+      tier2:
+        "Compute the low-rank update first: `delta = a @ b` which has the same shape as base_w. Then scale it by alpha and add: `merged = base_w + alpha * delta`.",
+      tier3:
+        "Near-code: `delta = a @ b`; `merged = base_w + alpha * delta`; return `merged`. Sanity-check: if `alpha` is 0 the result must equal `base_w` exactly, and `delta` must be `[in_dim, out_dim]`."
+    },
+    resources: [
+      {
+        title: "LoRA: Low-Rank Adaptation of Large Language Models",
+        url: "https://arxiv.org/abs/2106.09685"
+      },
+      {
+        title: "PyTorch Linear Layer (weight shape reference)",
+        url: "https://pytorch.org/docs/stable/generated/torch.nn.Linear.html"
+      }
+    ],
+    prerequisites: [
+      "Matrix multiplication shape rules",
+      "Understanding low-rank factorization shapes (A@B)",
+      "Scalar scaling and elementwise addition"
+    ],
+    common_pitfalls: [
+      "Computing `b @ a` instead of `a @ b` (shape mismatch or wrong result)",
+      "Applying alpha to base_w rather than the low-rank delta",
+      "Returning a projected output instead of the merged weight matrix"
+    ],
+    estimated_time_minutes: 18,
+    problem_version: 1,
+    torch_version_target: "2.0+",
+    learning_context:
+      "Where this shows up: deploying LoRA fine-tunes often involves merging low-rank adapters into base weights; this merge is a simple but critical step for reproducible inference."
+  },
+  {
+    id: "conditioning_adaln_modulation_v1",
+    title: "Implement Adaptive LayerNorm Modulation (AdaLN)",
+    category: "Conditioning & Modulation",
+    concept_description:
+      "Adaptive LayerNorm (AdaLN) is a conditioning mechanism where a normalized activation is modulated by per-example scale and shift parameters produced from a conditioning signal. It is common in conditional Transformers and diffusion models (e.g. AdaLN-Zero), and is closely related to FiLM but applied after a normalization step. This toy problem focuses on the forward computation: row-wise LayerNorm followed by `(1 + scale)` and `shift` modulation with correct broadcasting.",
+    goal:
+      "Write `adaln(x, scale, shift, eps)` for a 2D toy tensor `x` shaped `[batch, hidden]`, where `scale` and `shift` are also shaped `[batch, hidden]`. First compute a LayerNorm-style normalization per row: `x_hat = (x - mean) / sqrt(var + eps)` over the last dimension. Then return `y = x_hat * (1 + scale) + shift`. Use toy tensors only and return a finite 2D output with the same shape as x.",
+    starter_code:
+      "def adaln(x, scale, shift, eps=1e-5):\n    \"\"\"Adaptive LayerNorm modulation (AdaLN).\n\n    Shapes:\n      x: [batch, hidden]\n      scale: [batch, hidden]\n      shift: [batch, hidden]\n\n    Semantics (per row):\n      mean = mean(x)\n      var = mean((x - mean)^2)\n      x_hat = (x - mean) / sqrt(var + eps)\n      y = x_hat * (1 + scale) + shift\n    \"\"\"\n    # TODO: implement\n    pass",
+    inputs: {
+      tensor_shapes: ["x: [2, 4]", "scale: [2, 4]", "shift: [2, 4]", "eps: scalar"],
+      datatypes: ["float32"],
+      constraints: [
+        "toy tensors only (small fixed sizes)",
+        "no dataset usage, no training loop",
+        "normalize per row across the last dimension (LayerNorm-style)",
+        "apply modulation as x_hat * (1 + scale) + shift"
+      ]
+    },
+    expected_output: {
+      shape: "[2, 4]",
+      numerical_properties: [
+        "all values finite (no NaN/Inf)",
+        "same shape as input x",
+        "when scale=0 and shift=0, output equals LayerNorm(x) (without gamma/beta)",
+        "deterministic for fixed toy inputs"
+      ]
+    },
+    evaluation_logic: {
+      checks: [
+        "shape correctness ([batch, hidden])",
+        "LayerNorm-style normalization sanity (per row)",
+        "modulation formula correctness (1+scale, then shift)",
+        "numerical sanity (finite values, stable eps)"
+      ],
+      rationale:
+        "AdaLN-style conditioning is an imperative primitive in conditional sequence and diffusion models. The most common errors are normalizing over the wrong axis, forgetting the +1 in (1+scale), or misbroadcasting scale/shift. This small deterministic problem isolates the exact forward computation so later conditional blocks can assume correct normalization and modulation semantics."
+    },
+    hints: {
+      tier1:
+        "Think of AdaLN as: normalize x per row (LayerNorm-style), then do a FiLM-like modulation using per-example scale and shift.",
+      tier2:
+        "Compute `mean` and `var` along the last dimension with `keepdims=True` so `x - mean` broadcasts correctly. After computing `x_hat`, multiply by `(1 + scale)` (not just `scale`) and then add `shift` elementwise.",
+      tier3:
+        "Near-code: `mean = x.mean(-1, keepdims=True)`; `var = ((x-mean)**2).mean(-1, keepdims=True)`; `x_hat = (x-mean)/np.sqrt(var+eps)`; `y = x_hat * (1.0 + scale) + shift`. Sanity-check: if `scale` and `shift` are zeros, y should match plain LayerNorm output."
+    },
+    resources: [
+      {
+        title: "Layer Normalization Paper (normalization base)",
+        url: "https://arxiv.org/abs/1607.06450"
+      },
+      {
+        title: "DiT: Scalable Diffusion Models with Transformers (AdaLN-Zero context)",
+        url: "https://arxiv.org/abs/2212.09748"
+      }
+    ],
+    prerequisites: [
+      "LayerNorm forward computation (mean/variance over features)",
+      "Broadcasting and keepdims behavior",
+      "Elementwise affine modulation (scale/shift)"
+    ],
+    common_pitfalls: [
+      "Normalizing across the batch axis (BatchNorm-like) instead of per row",
+      "Forgetting the +1 in `(1 + scale)` which changes the identity behavior",
+      "Applying scale/shift as 1D vectors when the problem specifies per-example tensors"
+    ],
+    estimated_time_minutes: 28,
+    problem_version: 1,
+    torch_version_target: "2.0+",
+    learning_context:
+      "Where this shows up: conditional Transformers and diffusion models use AdaLN-style modulation to inject conditioning signals into normalized activations; implementing it correctly is key to reproducing reference architectures."
   }
 ]
 

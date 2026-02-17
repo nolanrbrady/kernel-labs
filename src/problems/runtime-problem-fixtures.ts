@@ -233,6 +233,239 @@ function ropeRotate(options: {
   })
 }
 
+function elementwiseOneMinus(matrix: number[][]): number[][] {
+  return matrix.map((row) => row.map((value) => 1 - value))
+}
+
+function elementwiseAddScalar(matrix: number[][], scalar: number): number[][] {
+  return matrix.map((row) => row.map((value) => value + scalar))
+}
+
+function scaleRowsByVector(matrix: number[][], vector: number[]): number[][] {
+  return matrix.map((row) => {
+    return row.map((value, index) => value * (vector[index] ?? 0))
+  })
+}
+
+function batchNormForwardTrain(options: {
+  x: number[][]
+  gamma: number[]
+  beta: number[]
+  eps?: number
+}): number[][] {
+  const eps = options.eps ?? 1e-5
+  const { x, gamma, beta } = options
+  const batch = x.length
+  const features = x[0]?.length ?? 0
+
+  const means: number[] = Array.from({ length: features }, () => 0)
+  for (let feature = 0; feature < features; feature += 1) {
+    let sum = 0
+    for (let rowIndex = 0; rowIndex < batch; rowIndex += 1) {
+      sum += x[rowIndex]?.[feature] ?? 0
+    }
+    means[feature] = batch === 0 ? 0 : sum / batch
+  }
+
+  const variances: number[] = Array.from({ length: features }, () => 0)
+  for (let feature = 0; feature < features; feature += 1) {
+    const mean = means[feature] ?? 0
+    let sumSq = 0
+    for (let rowIndex = 0; rowIndex < batch; rowIndex += 1) {
+      const delta = (x[rowIndex]?.[feature] ?? 0) - mean
+      sumSq += delta * delta
+    }
+    variances[feature] = batch === 0 ? 0 : sumSq / batch
+  }
+
+  const normalized = x.map((row) => {
+    return row.map((value, feature) => {
+      const denom = Math.sqrt((variances[feature] ?? 0) + eps)
+      return denom === 0 ? 0 : (value - (means[feature] ?? 0)) / denom
+    })
+  })
+
+  return addBiasRows(scaleRowsByVector(normalized, gamma), beta)
+}
+
+function rmsNormForward(options: {
+  x: number[][]
+  gamma: number[]
+  eps?: number
+}): number[][] {
+  const eps = options.eps ?? 1e-8
+  const { x, gamma } = options
+
+  return x.map((row) => {
+    const meanSq =
+      row.length === 0
+        ? 0
+        : row.reduce((sum, value) => sum + value * value, 0) / row.length
+    const denom = Math.sqrt(meanSq + eps)
+    return row.map((value, index) => {
+      const normalized = denom === 0 ? 0 : value / denom
+      return normalized * (gamma[index] ?? 0)
+    })
+  })
+}
+
+function geluTanh(matrix: number[][]): number[][] {
+  const c = Math.sqrt(2 / Math.PI)
+  const cubicCoeff = 0.044715
+
+  return matrix.map((row) => {
+    return row.map((value) => {
+      const inner = c * (value + cubicCoeff * value * value * value)
+      return 0.5 * value * (1 + Math.tanh(inner))
+    })
+  })
+}
+
+function maskedSoftmax(options: { scores: number[][]; mask: number[][] | null }): number[][] {
+  const { scores, mask } = options
+
+  return scores.map((row, rowIndex) => {
+    const maskedRow = row.map((value, columnIndex) => {
+      const maskBias = mask?.[rowIndex]?.[columnIndex] ?? 0
+      return value + maskBias
+    })
+    return softmaxRow(maskedRow)
+  })
+}
+
+function causalMask(options: { seqLen: number; maskedValue: number }): number[][] {
+  const mask: number[][] = Array.from({ length: options.seqLen }, () => {
+    return Array.from({ length: options.seqLen }, () => 0)
+  })
+
+  for (let rowIndex = 0; rowIndex < options.seqLen; rowIndex += 1) {
+    for (let columnIndex = rowIndex + 1; columnIndex < options.seqLen; columnIndex += 1) {
+      mask[rowIndex][columnIndex] = options.maskedValue
+    }
+  }
+
+  return mask
+}
+
+function splitHeadsFlat(options: { x: number[][]; numHeads: number }): number[][] {
+  const { x, numHeads } = options
+  const seqLen = x.length
+  const dModel = x[0]?.length ?? 0
+  const headDim = numHeads === 0 ? 0 : Math.floor(dModel / numHeads)
+
+  const out: number[][] = []
+  for (let tokenIndex = 0; tokenIndex < seqLen; tokenIndex += 1) {
+    const row = x[tokenIndex] ?? []
+    for (let headIndex = 0; headIndex < numHeads; headIndex += 1) {
+      const start = headIndex * headDim
+      out.push(row.slice(start, start + headDim))
+    }
+  }
+  return out
+}
+
+function gruStep(options: {
+  x_t: number[][]
+  h_prev: number[][]
+  w_xz: number[][]
+  w_hz: number[][]
+  b_z: number[]
+  w_xr: number[][]
+  w_hr: number[][]
+  b_r: number[]
+  w_xn: number[][]
+  w_hn: number[][]
+  b_n: number[]
+}): number[][] {
+  const z = sigmoid(
+    addBiasRows(
+      elementwiseAdd(matMul(options.x_t, options.w_xz), matMul(options.h_prev, options.w_hz)),
+      options.b_z
+    )
+  )
+  const r = sigmoid(
+    addBiasRows(
+      elementwiseAdd(matMul(options.x_t, options.w_xr), matMul(options.h_prev, options.w_hr)),
+      options.b_r
+    )
+  )
+  const resetHidden = elementwiseMultiply(r, options.h_prev)
+  const n = tanh(
+    addBiasRows(
+      elementwiseAdd(matMul(options.x_t, options.w_xn), matMul(resetHidden, options.w_hn)),
+      options.b_n
+    )
+  )
+
+  return elementwiseAdd(
+    elementwiseMultiply(elementwiseOneMinus(z), n),
+    elementwiseMultiply(z, options.h_prev)
+  )
+}
+
+function mergeLoraWeights(options: {
+  baseW: number[][]
+  a: number[][]
+  b: number[][]
+  alpha: number
+}): number[][] {
+  return elementwiseAdd(options.baseW, elementwiseScale(matMul(options.a, options.b), options.alpha))
+}
+
+function layerNormPlain(options: { x: number[][]; eps?: number }): number[][] {
+  const eps = options.eps ?? 1e-5
+  const { x } = options
+
+  return x.map((row) => {
+    const mean = row.length === 0 ? 0 : row.reduce((sum, value) => sum + value, 0) / row.length
+    const variance =
+      row.length === 0
+        ? 0
+        : row.reduce((sum, value) => {
+            const delta = value - mean
+            return sum + delta * delta
+          }, 0) / row.length
+    const denom = Math.sqrt(variance + eps)
+
+    return row.map((value) => {
+      return denom === 0 ? 0 : (value - mean) / denom
+    })
+  })
+}
+
+function adaLayerNorm(options: {
+  x: number[][]
+  scale: number[][]
+  shift: number[][]
+  eps?: number
+}): number[][] {
+  const xHat = layerNormPlain({ x: options.x, eps: options.eps })
+  const scalePlusOne = elementwiseAddScalar(options.scale, 1)
+  return elementwiseAdd(elementwiseMultiply(xHat, scalePlusOne), options.shift)
+}
+
+function moeMlpTop1(options: {
+  x: number[][]
+  gateLogits: number[][]
+  w0: number[][]
+  b0: number[]
+  w1: number[][]
+  b1: number[]
+}): number[][] {
+  const expert0 = relu(addBiasRows(matMul(options.x, options.w0), options.b0))
+  const expert1 = relu(addBiasRows(matMul(options.x, options.w1), options.b1))
+
+  return options.x.map((_, tokenIndex) => {
+    const logits = options.gateLogits[tokenIndex] ?? []
+    const logit0 = logits[0] ?? Number.NEGATIVE_INFINITY
+    const logit1 = logits[1] ?? Number.NEGATIVE_INFINITY
+    const expertIndex = logit1 > logit0 ? 1 : 0
+    return expertIndex === 0
+      ? [...(expert0[tokenIndex] ?? [])]
+      : [...(expert1[tokenIndex] ?? [])]
+  })
+}
+
 function buildFixture(options: {
   problemId: string
   functionName: string
@@ -1092,6 +1325,906 @@ function buildFixtures(): RuntimeProblemFixture[] {
     })
   )
 
+  fixtures.push(
+    buildFixture({
+      problemId: "normalization_batchnorm_forward_train_v1",
+      functionName: "batch_norm_forward_train",
+      inputOrder: ["x", "gamma", "beta"],
+      testCases: [
+        {
+          id: "case_1_identity_gamma_beta",
+          name: "Case 1 - Identity Gamma/Beta",
+          inputs: {
+            x: [
+              [1, 2, 3, 4],
+              [2, 3, 4, 5],
+              [0, 1, 2, 3]
+            ],
+            gamma: [1, 1, 1, 1],
+            beta: [0, 0, 0, 0]
+          },
+          expectedOutput: batchNormForwardTrain({
+            x: [
+              [1, 2, 3, 4],
+              [2, 3, 4, 5],
+              [0, 1, 2, 3]
+            ],
+            gamma: [1, 1, 1, 1],
+            beta: [0, 0, 0, 0]
+          })
+        },
+        {
+          id: "case_2_zero_variance_columns",
+          name: "Case 2 - Zero Variance Columns",
+          inputs: {
+            x: [
+              [1, 1, 1, 1],
+              [1, 2, 1, 2],
+              [1, 3, 1, 3]
+            ],
+            gamma: [0.5, -1, 2, 0.25],
+            beta: [0.1, 0.2, -0.3, 0.4]
+          },
+          expectedOutput: batchNormForwardTrain({
+            x: [
+              [1, 1, 1, 1],
+              [1, 2, 1, 2],
+              [1, 3, 1, 3]
+            ],
+            gamma: [0.5, -1, 2, 0.25],
+            beta: [0.1, 0.2, -0.3, 0.4]
+          })
+        }
+      ]
+    })
+  )
+
+  fixtures.push(
+    buildFixture({
+      problemId: "normalization_rmsnorm_forward_v1",
+      functionName: "rms_norm_forward",
+      inputOrder: ["x", "gamma"],
+      testCases: [
+        {
+          id: "case_1_identity_gamma",
+          name: "Case 1 - Identity Gamma",
+          inputs: {
+            x: [
+              [1, 2, 0, -2],
+              [0, 0, 0, 0]
+            ],
+            gamma: [1, 1, 1, 1]
+          },
+          expectedOutput: rmsNormForward({
+            x: [
+              [1, 2, 0, -2],
+              [0, 0, 0, 0]
+            ],
+            gamma: [1, 1, 1, 1]
+          })
+        },
+        {
+          id: "case_2_nontrivial_gamma",
+          name: "Case 2 - Nontrivial Gamma",
+          inputs: {
+            x: [
+              [-1, 1, 2, -2],
+              [3, 0, -3, 0.5]
+            ],
+            gamma: [1.5, 0.5, -1, 2]
+          },
+          expectedOutput: rmsNormForward({
+            x: [
+              [-1, 1, 2, -2],
+              [3, 0, -3, 0.5]
+            ],
+            gamma: [1.5, 0.5, -1, 2]
+          })
+        }
+      ]
+    })
+  )
+
+  fixtures.push(
+    buildFixture({
+      problemId: "mlp_gelu_tanh_approx_v1",
+      functionName: "gelu_tanh",
+      inputOrder: ["x"],
+      testCases: [
+        {
+          id: "case_1_small_values",
+          name: "Case 1 - Small Values",
+          inputs: {
+            x: [
+              [-1, 0, 1, 2],
+              [0.5, -0.5, 3, -2]
+            ]
+          },
+          expectedOutput: geluTanh([
+            [-1, 0, 1, 2],
+            [0.5, -0.5, 3, -2]
+          ])
+        },
+        {
+          id: "case_2_large_magnitudes",
+          name: "Case 2 - Large Magnitudes",
+          inputs: {
+            x: [
+              [-5, -2, 2, 5],
+              [4, -4, 1, -1]
+            ]
+          },
+          expectedOutput: geluTanh([
+            [-5, -2, 2, 5],
+            [4, -4, 1, -1]
+          ])
+        }
+      ]
+    })
+  )
+
+  fixtures.push(
+    buildFixture({
+      problemId: "mlp_swiglu_block_v1",
+      functionName: "swiglu_block",
+      inputOrder: ["x", "w_gate", "b_gate", "w_up", "b_up"],
+      testCases: [
+        {
+          id: "case_1_basic_gate",
+          name: "Case 1 - Basic Gate",
+          inputs: {
+            x: [
+              [1, 0, -1],
+              [0.5, 0.5, 0]
+            ],
+            w_gate: [
+              [0.2, -0.1, 0.0, 0.3],
+              [0.1, 0.4, -0.2, 0.0],
+              [-0.3, 0.2, 0.1, -0.1]
+            ],
+            b_gate: [0.05, -0.1, 0.0, 0.1],
+            w_up: [
+              [0.1, 0.0, -0.2, 0.3],
+              [0.0, 0.2, 0.1, 0.0],
+              [0.2, -0.1, 0.0, 0.1]
+            ],
+            b_up: [0.0, 0.1, -0.05, 0.0]
+          },
+          expectedOutput: elementwiseMultiply(
+            elementwiseMultiply(
+              addBiasRows(
+                matMul(
+                  [
+                    [1, 0, -1],
+                    [0.5, 0.5, 0]
+                  ],
+                  [
+                    [0.2, -0.1, 0.0, 0.3],
+                    [0.1, 0.4, -0.2, 0.0],
+                    [-0.3, 0.2, 0.1, -0.1]
+                  ]
+                ),
+                [0.05, -0.1, 0.0, 0.1]
+              ),
+              sigmoid(
+                addBiasRows(
+                  matMul(
+                    [
+                      [1, 0, -1],
+                      [0.5, 0.5, 0]
+                    ],
+                    [
+                      [0.2, -0.1, 0.0, 0.3],
+                      [0.1, 0.4, -0.2, 0.0],
+                      [-0.3, 0.2, 0.1, -0.1]
+                    ]
+                  ),
+                  [0.05, -0.1, 0.0, 0.1]
+                )
+              )
+            ),
+            addBiasRows(
+              matMul(
+                [
+                  [1, 0, -1],
+                  [0.5, 0.5, 0]
+                ],
+                [
+                  [0.1, 0.0, -0.2, 0.3],
+                  [0.0, 0.2, 0.1, 0.0],
+                  [0.2, -0.1, 0.0, 0.1]
+                ]
+              ),
+              [0.0, 0.1, -0.05, 0.0]
+            )
+          )
+        },
+        {
+          id: "case_2_nontrivial_bias",
+          name: "Case 2 - Nontrivial Bias",
+          inputs: {
+            x: [
+              [0, 1, 2],
+              [-1, 0, 1]
+            ],
+            w_gate: [
+              [0.1, 0.2, -0.1, 0.0],
+              [0.0, -0.2, 0.3, 0.1],
+              [0.2, 0.0, 0.1, -0.3]
+            ],
+            b_gate: [0.2, 0.0, -0.1, 0.05],
+            w_up: [
+              [0.3, 0.0, 0.1, -0.2],
+              [0.0, 0.1, 0.0, 0.2],
+              [-0.1, 0.2, 0.3, 0.0]
+            ],
+            b_up: [-0.05, 0.0, 0.1, 0.2]
+          },
+          expectedOutput: elementwiseMultiply(
+            elementwiseMultiply(
+              addBiasRows(
+                matMul(
+                  [
+                    [0, 1, 2],
+                    [-1, 0, 1]
+                  ],
+                  [
+                    [0.1, 0.2, -0.1, 0.0],
+                    [0.0, -0.2, 0.3, 0.1],
+                    [0.2, 0.0, 0.1, -0.3]
+                  ]
+                ),
+                [0.2, 0.0, -0.1, 0.05]
+              ),
+              sigmoid(
+                addBiasRows(
+                  matMul(
+                    [
+                      [0, 1, 2],
+                      [-1, 0, 1]
+                    ],
+                    [
+                      [0.1, 0.2, -0.1, 0.0],
+                      [0.0, -0.2, 0.3, 0.1],
+                      [0.2, 0.0, 0.1, -0.3]
+                    ]
+                  ),
+                  [0.2, 0.0, -0.1, 0.05]
+                )
+              )
+            ),
+            addBiasRows(
+              matMul(
+                [
+                  [0, 1, 2],
+                  [-1, 0, 1]
+                ],
+                [
+                  [0.3, 0.0, 0.1, -0.2],
+                  [0.0, 0.1, 0.0, 0.2],
+                  [-0.1, 0.2, 0.3, 0.0]
+                ]
+              ),
+              [-0.05, 0.0, 0.1, 0.2]
+            )
+          )
+        }
+      ]
+    })
+  )
+
+  fixtures.push(
+    buildFixture({
+      problemId: "mlp_moe_top1_routed_relu_v1",
+      functionName: "moe_mlp_top1",
+      inputOrder: ["x", "gate_logits", "w0", "b0", "w1", "b1"],
+      testCases: [
+        {
+          id: "case_1_mixed_routes_with_tie",
+          name: "Case 1 - Mixed Routes With Tie",
+          inputs: {
+            x: [
+              [1, -1],
+              [0, 2],
+              [-1, 1]
+            ],
+            gate_logits: [
+              [2, 0],
+              [0, 3],
+              [1, 1]
+            ],
+            w0: [
+              [1, 0, -1],
+              [0.5, 1, 0]
+            ],
+            b0: [0.1, -0.2, 0.0],
+            w1: [
+              [0.2, 0.5, 0.0],
+              [-0.3, 0.0, 1.0]
+            ],
+            b1: [0.0, 0.2, -0.1]
+          },
+          expectedOutput: moeMlpTop1({
+            x: [
+              [1, -1],
+              [0, 2],
+              [-1, 1]
+            ],
+            gateLogits: [
+              [2, 0],
+              [0, 3],
+              [1, 1]
+            ],
+            w0: [
+              [1, 0, -1],
+              [0.5, 1, 0]
+            ],
+            b0: [0.1, -0.2, 0.0],
+            w1: [
+              [0.2, 0.5, 0.0],
+              [-0.3, 0.0, 1.0]
+            ],
+            b1: [0.0, 0.2, -0.1]
+          })
+        },
+        {
+          id: "case_2_all_expert_one",
+          name: "Case 2 - All Expert One",
+          inputs: {
+            x: [
+              [2, 0],
+              [-1, -1],
+              [0.5, 1.5]
+            ],
+            gate_logits: [
+              [0, 1],
+              [-2, 0],
+              [1, 2]
+            ],
+            w0: [
+              [1, 0, -1],
+              [0.5, 1, 0]
+            ],
+            b0: [0.1, -0.2, 0.0],
+            w1: [
+              [0.2, 0.5, 0.0],
+              [-0.3, 0.0, 1.0]
+            ],
+            b1: [0.0, 0.2, -0.1]
+          },
+          expectedOutput: moeMlpTop1({
+            x: [
+              [2, 0],
+              [-1, -1],
+              [0.5, 1.5]
+            ],
+            gateLogits: [
+              [0, 1],
+              [-2, 0],
+              [1, 2]
+            ],
+            w0: [
+              [1, 0, -1],
+              [0.5, 1, 0]
+            ],
+            b0: [0.1, -0.2, 0.0],
+            w1: [
+              [0.2, 0.5, 0.0],
+              [-0.3, 0.0, 1.0]
+            ],
+            b1: [0.0, 0.2, -0.1]
+          })
+        }
+      ]
+    })
+  )
+
+  fixtures.push(
+    buildFixture({
+      problemId: "attention_causal_mask_additive_v1",
+      functionName: "causal_mask",
+      inputOrder: ["seq_len", "masked_value"],
+      testCases: [
+        {
+          id: "case_1_default_scale",
+          name: "Case 1 - Masked Value -1e9",
+          inputs: {
+            seq_len: 3,
+            masked_value: -1000000000
+          },
+          expectedOutput: causalMask({ seqLen: 3, maskedValue: -1000000000 })
+        },
+        {
+          id: "case_2_smaller_negative",
+          name: "Case 2 - Masked Value -1000",
+          inputs: {
+            seq_len: 3,
+            masked_value: -1000
+          },
+          expectedOutput: causalMask({ seqLen: 3, maskedValue: -1000 })
+        }
+      ]
+    })
+  )
+
+  fixtures.push(
+    buildFixture({
+      problemId: "attention_masked_softmax_v1",
+      functionName: "masked_softmax",
+      inputOrder: ["scores", "mask"],
+      testCases: [
+        {
+          id: "case_1_no_mask",
+          name: "Case 1 - No Mask",
+          inputs: {
+            scores: [
+              [1, 0, -1],
+              [0.5, 0.5, 0],
+              [-2, 1, 3]
+            ],
+            mask: null
+          },
+          expectedOutput: maskedSoftmax({
+            scores: [
+              [1, 0, -1],
+              [0.5, 0.5, 0],
+              [-2, 1, 3]
+            ],
+            mask: null
+          })
+        },
+        {
+          id: "case_2_causal_mask",
+          name: "Case 2 - Causal Mask",
+          inputs: {
+            scores: [
+              [1, 0, -1],
+              [0.5, 0.5, 0],
+              [-2, 1, 3]
+            ],
+            mask: [
+              [0, -1000000000, -1000000000],
+              [0, 0, -1000000000],
+              [0, 0, 0]
+            ]
+          },
+          expectedOutput: maskedSoftmax({
+            scores: [
+              [1, 0, -1],
+              [0.5, 0.5, 0],
+              [-2, 1, 3]
+            ],
+            mask: [
+              [0, -1000000000, -1000000000],
+              [0, 0, -1000000000],
+              [0, 0, 0]
+            ]
+          })
+        }
+      ]
+    })
+  )
+
+  fixtures.push(
+    buildFixture({
+      problemId: "attention_split_heads_flat_v1",
+      functionName: "split_heads_flat",
+      inputOrder: ["x", "num_heads"],
+      testCases: [
+        {
+          id: "case_1_seq2_heads2",
+          name: "Case 1 - Seq2 Heads2",
+          inputs: {
+            x: [
+              [1, 2, 3, 4],
+              [5, 6, 7, 8]
+            ],
+            num_heads: 2
+          },
+          expectedOutput: splitHeadsFlat({
+            x: [
+              [1, 2, 3, 4],
+              [5, 6, 7, 8]
+            ],
+            numHeads: 2
+          })
+        },
+        {
+          id: "case_2_mixed_values",
+          name: "Case 2 - Mixed Values",
+          inputs: {
+            x: [
+              [0.1, -0.2, 0.3, -0.4],
+              [-1, 0, 1, 2]
+            ],
+            num_heads: 2
+          },
+          expectedOutput: splitHeadsFlat({
+            x: [
+              [0.1, -0.2, 0.3, -0.4],
+              [-1, 0, 1, 2]
+            ],
+            numHeads: 2
+          })
+        }
+      ]
+    })
+  )
+
+  fixtures.push(
+    buildFixture({
+      problemId: "rnn_gru_step_v1",
+      functionName: "gru_step",
+      inputOrder: [
+        "x_t",
+        "h_prev",
+        "w_xz",
+        "w_hz",
+        "b_z",
+        "w_xr",
+        "w_hr",
+        "b_r",
+        "w_xn",
+        "w_hn",
+        "b_n"
+      ],
+      testCases: [
+        {
+          id: "case_1_basic_step",
+          name: "Case 1 - Basic Step",
+          inputs: {
+            x_t: [
+              [1, 0, -1],
+              [0.5, 0.5, 0]
+            ],
+            h_prev: [
+              [0, 1, 0, -1],
+              [1, 0, -1, 0]
+            ],
+            w_xz: [
+              [0.1, -0.2, 0.0, 0.2],
+              [0.0, 0.1, -0.1, 0.0],
+              [-0.2, 0.0, 0.1, -0.1]
+            ],
+            w_hz: [
+              [0.3, 0.0, 0.0, 0.0],
+              [0.0, 0.3, 0.0, 0.0],
+              [0.0, 0.0, 0.3, 0.0],
+              [0.0, 0.0, 0.0, 0.3]
+            ],
+            b_z: [0.05, -0.05, 0.0, 0.1],
+            w_xr: [
+              [0.0, 0.1, 0.2, -0.1],
+              [0.1, 0.0, -0.1, 0.2],
+              [-0.1, 0.2, 0.0, 0.1]
+            ],
+            w_hr: [
+              [0.25, 0.0, 0.0, 0.0],
+              [0.0, 0.25, 0.0, 0.0],
+              [0.0, 0.0, 0.25, 0.0],
+              [0.0, 0.0, 0.0, 0.25]
+            ],
+            b_r: [0.0, 0.1, -0.05, 0.0],
+            w_xn: [
+              [0.2, 0.0, -0.1, 0.1],
+              [0.0, 0.2, 0.1, 0.0],
+              [-0.2, 0.1, 0.0, 0.2]
+            ],
+            w_hn: [
+              [0.4, 0.0, 0.0, 0.0],
+              [0.0, 0.4, 0.0, 0.0],
+              [0.0, 0.0, 0.4, 0.0],
+              [0.0, 0.0, 0.0, 0.4]
+            ],
+            b_n: [0.0, -0.1, 0.05, 0.0]
+          },
+          expectedOutput: gruStep({
+            x_t: [
+              [1, 0, -1],
+              [0.5, 0.5, 0]
+            ],
+            h_prev: [
+              [0, 1, 0, -1],
+              [1, 0, -1, 0]
+            ],
+            w_xz: [
+              [0.1, -0.2, 0.0, 0.2],
+              [0.0, 0.1, -0.1, 0.0],
+              [-0.2, 0.0, 0.1, -0.1]
+            ],
+            w_hz: [
+              [0.3, 0.0, 0.0, 0.0],
+              [0.0, 0.3, 0.0, 0.0],
+              [0.0, 0.0, 0.3, 0.0],
+              [0.0, 0.0, 0.0, 0.3]
+            ],
+            b_z: [0.05, -0.05, 0.0, 0.1],
+            w_xr: [
+              [0.0, 0.1, 0.2, -0.1],
+              [0.1, 0.0, -0.1, 0.2],
+              [-0.1, 0.2, 0.0, 0.1]
+            ],
+            w_hr: [
+              [0.25, 0.0, 0.0, 0.0],
+              [0.0, 0.25, 0.0, 0.0],
+              [0.0, 0.0, 0.25, 0.0],
+              [0.0, 0.0, 0.0, 0.25]
+            ],
+            b_r: [0.0, 0.1, -0.05, 0.0],
+            w_xn: [
+              [0.2, 0.0, -0.1, 0.1],
+              [0.0, 0.2, 0.1, 0.0],
+              [-0.2, 0.1, 0.0, 0.2]
+            ],
+            w_hn: [
+              [0.4, 0.0, 0.0, 0.0],
+              [0.0, 0.4, 0.0, 0.0],
+              [0.0, 0.0, 0.4, 0.0],
+              [0.0, 0.0, 0.0, 0.4]
+            ],
+            b_n: [0.0, -0.1, 0.05, 0.0]
+          })
+        },
+        {
+          id: "case_2_high_update_gate_bias",
+          name: "Case 2 - High Update Gate Bias",
+          inputs: {
+            x_t: [
+              [0, 1, 0],
+              [1, 1, 1]
+            ],
+            h_prev: [
+              [0.2, -0.2, 0.4, -0.4],
+              [1.0, 0.0, -1.0, 0.5]
+            ],
+            w_xz: [
+              [0.0, 0.0, 0.0, 0.0],
+              [0.0, 0.0, 0.0, 0.0],
+              [0.0, 0.0, 0.0, 0.0]
+            ],
+            w_hz: [
+              [0.0, 0.0, 0.0, 0.0],
+              [0.0, 0.0, 0.0, 0.0],
+              [0.0, 0.0, 0.0, 0.0],
+              [0.0, 0.0, 0.0, 0.0]
+            ],
+            b_z: [5, 5, 5, 5],
+            w_xr: [
+              [0.1, 0.0, 0.0, 0.0],
+              [0.0, 0.1, 0.0, 0.0],
+              [0.0, 0.0, 0.1, 0.0]
+            ],
+            w_hr: [
+              [0.1, 0.0, 0.0, 0.0],
+              [0.0, 0.1, 0.0, 0.0],
+              [0.0, 0.0, 0.1, 0.0],
+              [0.0, 0.0, 0.0, 0.1]
+            ],
+            b_r: [0.0, 0.0, 0.0, 0.0],
+            w_xn: [
+              [0.2, 0.0, 0.0, 0.0],
+              [0.0, 0.2, 0.0, 0.0],
+              [0.0, 0.0, 0.2, 0.0]
+            ],
+            w_hn: [
+              [0.2, 0.0, 0.0, 0.0],
+              [0.0, 0.2, 0.0, 0.0],
+              [0.0, 0.0, 0.2, 0.0],
+              [0.0, 0.0, 0.0, 0.2]
+            ],
+            b_n: [0.0, 0.0, 0.0, 0.0]
+          },
+          expectedOutput: gruStep({
+            x_t: [
+              [0, 1, 0],
+              [1, 1, 1]
+            ],
+            h_prev: [
+              [0.2, -0.2, 0.4, -0.4],
+              [1.0, 0.0, -1.0, 0.5]
+            ],
+            w_xz: [
+              [0.0, 0.0, 0.0, 0.0],
+              [0.0, 0.0, 0.0, 0.0],
+              [0.0, 0.0, 0.0, 0.0]
+            ],
+            w_hz: [
+              [0.0, 0.0, 0.0, 0.0],
+              [0.0, 0.0, 0.0, 0.0],
+              [0.0, 0.0, 0.0, 0.0],
+              [0.0, 0.0, 0.0, 0.0]
+            ],
+            b_z: [5, 5, 5, 5],
+            w_xr: [
+              [0.1, 0.0, 0.0, 0.0],
+              [0.0, 0.1, 0.0, 0.0],
+              [0.0, 0.0, 0.1, 0.0]
+            ],
+            w_hr: [
+              [0.1, 0.0, 0.0, 0.0],
+              [0.0, 0.1, 0.0, 0.0],
+              [0.0, 0.0, 0.1, 0.0],
+              [0.0, 0.0, 0.0, 0.1]
+            ],
+            b_r: [0.0, 0.0, 0.0, 0.0],
+            w_xn: [
+              [0.2, 0.0, 0.0, 0.0],
+              [0.0, 0.2, 0.0, 0.0],
+              [0.0, 0.0, 0.2, 0.0]
+            ],
+            w_hn: [
+              [0.2, 0.0, 0.0, 0.0],
+              [0.0, 0.2, 0.0, 0.0],
+              [0.0, 0.0, 0.2, 0.0],
+              [0.0, 0.0, 0.0, 0.2]
+            ],
+            b_n: [0.0, 0.0, 0.0, 0.0]
+          })
+        }
+      ]
+    })
+  )
+
+  fixtures.push(
+    buildFixture({
+      problemId: "adaptation_lora_merge_weights_v1",
+      functionName: "merge_lora_weights",
+      inputOrder: ["base_w", "a", "b", "alpha"],
+      testCases: [
+        {
+          id: "case_1_alpha_zero_matches_base",
+          name: "Case 1 - Alpha Zero Matches Base",
+          inputs: {
+            base_w: [
+              [1, 0, 0],
+              [0, 1, 0],
+              [0, 0, 1]
+            ],
+            a: [
+              [0.1, 0.0],
+              [0.0, 0.2],
+              [0.3, -0.1]
+            ],
+            b: [
+              [0.5, 0, 0.5],
+              [0, 0.5, 0.5]
+            ],
+            alpha: 0
+          },
+          expectedOutput: mergeLoraWeights({
+            baseW: [
+              [1, 0, 0],
+              [0, 1, 0],
+              [0, 0, 1]
+            ],
+            a: [
+              [0.1, 0.0],
+              [0.0, 0.2],
+              [0.3, -0.1]
+            ],
+            b: [
+              [0.5, 0, 0.5],
+              [0, 0.5, 0.5]
+            ],
+            alpha: 0
+          })
+        },
+        {
+          id: "case_2_nonzero_alpha",
+          name: "Case 2 - Nonzero Alpha",
+          inputs: {
+            base_w: [
+              [0.2, 0, 0.1],
+              [0.1, 0.3, 0],
+              [-0.2, 0.1, 0.4]
+            ],
+            a: [
+              [0.1, -0.2],
+              [0.0, 0.3],
+              [0.2, 0.1]
+            ],
+            b: [
+              [0.5, 0, 0.25],
+              [0.0, 0.5, -0.25]
+            ],
+            alpha: 0.75
+          },
+          expectedOutput: mergeLoraWeights({
+            baseW: [
+              [0.2, 0, 0.1],
+              [0.1, 0.3, 0],
+              [-0.2, 0.1, 0.4]
+            ],
+            a: [
+              [0.1, -0.2],
+              [0.0, 0.3],
+              [0.2, 0.1]
+            ],
+            b: [
+              [0.5, 0, 0.25],
+              [0.0, 0.5, -0.25]
+            ],
+            alpha: 0.75
+          })
+        }
+      ]
+    })
+  )
+
+  fixtures.push(
+    buildFixture({
+      problemId: "conditioning_adaln_modulation_v1",
+      functionName: "adaln",
+      inputOrder: ["x", "scale", "shift"],
+      testCases: [
+        {
+          id: "case_1_zero_modulation_matches_ln",
+          name: "Case 1 - Zero Modulation Matches LayerNorm",
+          inputs: {
+            x: [
+              [1, 2, 3, 4],
+              [2, 2, 2, 2]
+            ],
+            scale: [
+              [0, 0, 0, 0],
+              [0, 0, 0, 0]
+            ],
+            shift: [
+              [0, 0, 0, 0],
+              [0, 0, 0, 0]
+            ]
+          },
+          expectedOutput: adaLayerNorm({
+            x: [
+              [1, 2, 3, 4],
+              [2, 2, 2, 2]
+            ],
+            scale: [
+              [0, 0, 0, 0],
+              [0, 0, 0, 0]
+            ],
+            shift: [
+              [0, 0, 0, 0],
+              [0, 0, 0, 0]
+            ]
+          })
+        },
+        {
+          id: "case_2_nontrivial_modulation",
+          name: "Case 2 - Nontrivial Modulation",
+          inputs: {
+            x: [
+              [-1, 0, 1, 2],
+              [1, 2, 4, 8]
+            ],
+            scale: [
+              [0.1, -0.2, 0.0, 0.5],
+              [0.0, 0.25, -0.1, 0.0]
+            ],
+            shift: [
+              [0.0, 0.1, -0.1, 0.0],
+              [0.2, 0.0, 0.0, -0.2]
+            ]
+          },
+          expectedOutput: adaLayerNorm({
+            x: [
+              [-1, 0, 1, 2],
+              [1, 2, 4, 8]
+            ],
+            scale: [
+              [0.1, -0.2, 0.0, 0.5],
+              [0.0, 0.25, -0.1, 0.0]
+            ],
+            shift: [
+              [0.0, 0.1, -0.1, 0.0],
+              [0.2, 0.0, 0.0, -0.2]
+            ]
+          })
+        }
+      ]
+    })
+  )
+
   return fixtures
 }
 
@@ -1105,4 +2238,3 @@ export function getRuntimeProblemFixture(problemId: string): RuntimeProblemFixtu
   const fixture = FIXTURES.find((candidate) => candidate.problemId === problemId)
   return fixture ? { ...fixture } : null
 }
-
