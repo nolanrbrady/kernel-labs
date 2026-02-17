@@ -1,10 +1,15 @@
-import { copyFile, mkdir, readdir } from "node:fs/promises"
+import { copyFile, mkdir, rm } from "node:fs/promises"
 import { join, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
 
 const repoRoot = resolve(".")
-const generatedDir = join(repoRoot, "src", "frontend", ".generated-client")
-const outputDir = join(repoRoot, "src", "frontend")
+const staticWorkspaceDir = join(
+  repoRoot,
+  "dist",
+  "static",
+  "workspace-client"
+)
+const sourceFrontendDir = join(repoRoot, "src", "frontend")
 
 function runTypeScriptBuild() {
   const result = spawnSync(
@@ -25,21 +30,18 @@ function runTypeScriptBuild() {
   }
 }
 
-async function publishBuiltScripts() {
-  await mkdir(outputDir, { recursive: true })
-  const entries = await readdir(generatedDir, { withFileTypes: true })
-
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith(".js")) {
-      continue
-    }
-
-    await copyFile(
-      join(generatedDir, entry.name),
-      join(outputDir, entry.name)
-    )
-  }
+async function resetOutputDir() {
+  await rm(staticWorkspaceDir, { recursive: true, force: true })
+  await mkdir(staticWorkspaceDir, { recursive: true })
 }
 
+async function copyWorkspaceStyles() {
+  await copyFile(
+    join(sourceFrontendDir, "problem-workspace.css"),
+    join(staticWorkspaceDir, "problem-workspace.css")
+  )
+}
+
+await resetOutputDir()
 runTypeScriptBuild()
-await publishBuiltScripts()
+await copyWorkspaceStyles()

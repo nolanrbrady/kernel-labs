@@ -4,7 +4,7 @@ import type {
   ClassNameNodeLike,
   TabNodeLike,
   TextNodeLike
-} from "./problem-workspace-client-types.js"
+} from "./types.js"
 
 export function setText(
   node: TextNodeLike | null | undefined,

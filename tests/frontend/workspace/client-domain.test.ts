@@ -5,7 +5,7 @@ import {
   VisibleTestCaseTracker,
   SuggestTopicFormValidator,
   AnonymousProgressStore
-} from "../src/frontend/client-ts/problem-workspace-client-domain.js"
+} from "../../../src/frontend/client-ts/workspace-client/domain/models.js"
 
 function loadDomainClasses() {
   return {

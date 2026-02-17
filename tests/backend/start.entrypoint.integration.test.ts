@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { resolvePort, startServer } from "../src/backend/server.js"
+import { resolvePort, startServer } from "../../src/backend/server.js"
 
 test("resolvePort uses default when PORT is empty", () => {
   assert.equal(resolvePort(undefined), 3000)
@@ -35,9 +35,18 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(rootResponse.headers.get("content-type")?.includes("text/html"), true)
 
   // HTML document references external static assets
-  assert.equal(rootHtml.includes('href="/static/problem-workspace.css?v='), true)
-  assert.equal(rootHtml.includes('type="module" src="/static/problem-workspace-client.js?v='), true)
-  assert.equal(rootHtml.includes('src="/static/problem-workspace-client.js?v='), true)
+  assert.equal(
+    rootHtml.includes('href="/static/workspace-client/problem-workspace.css?v='),
+    true
+  )
+  assert.equal(
+    rootHtml.includes('type="module" src="/static/workspace-client/index.js?v='),
+    true
+  )
+  assert.equal(
+    rootHtml.includes('src="/static/workspace-client/index.js?v='),
+    true
+  )
   assert.equal(rootHtml.includes("data-theme=\"deepmlsr-workspace\""), true)
 
   // React-rendered workspace markup
@@ -118,7 +127,9 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(rootHtml.includes("conditioning_film_affine_shift_scale_v1"), true)
 
   // Static CSS is served with correct content-type and contains theme rules
-  const cssResponse = await fetch(`${base}/static/problem-workspace.css`)
+  const cssResponse = await fetch(
+    `${base}/static/workspace-client/problem-workspace.css`
+  )
   assert.equal(cssResponse.status, 200)
   assert.equal(cssResponse.headers.get("content-type")?.includes("text/css"), true)
   const cssText = await cssResponse.text()
@@ -127,18 +138,22 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(cssText.includes("--bg-base"), true)
 
   // Static JS is served with correct content-type and contains client logic
-  const jsResponse = await fetch(`${base}/static/problem-workspace-client.js`)
+  const jsResponse = await fetch(
+    `${base}/static/workspace-client/index.js`
+  )
   assert.equal(jsResponse.status, 200)
   assert.equal(jsResponse.headers.get("content-type")?.includes("javascript"), true)
   const jsText = await jsResponse.text()
   assert.equal(jsText.includes("initializeProblemWorkspaceClient"), true)
-  assert.equal(jsText.includes("from \"./problem-workspace-client-domain.js\""), true)
-  assert.equal(jsText.includes("from \"./problem-workspace-client-controllers.js\""), true)
+  assert.equal(jsText.includes("from \"./domain/models.js\""), true)
+  assert.equal(jsText.includes("from \"./controllers/index.js\""), true)
   assert.equal(jsText.includes("new SessionController"), true)
   assert.equal(jsText.includes("new SubmissionController"), true)
   assert.equal(jsText.includes("submissionController.submitSession(\"timer-cap\")"), true)
 
-  const domainResponse = await fetch(`${base}/static/problem-workspace-client-domain.js`)
+  const domainResponse = await fetch(
+    `${base}/static/workspace-client/domain/models.js`
+  )
   assert.equal(domainResponse.status, 200)
   assert.equal(domainResponse.headers.get("content-type")?.includes("javascript"), true)
   const domainText = await domainResponse.text()
@@ -146,13 +161,17 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(domainText.includes("class VisibleTestCaseTracker"), true)
   assert.equal(domainText.includes("class AnonymousProgressStore"), true)
 
-  const controllerResponse = await fetch(`${base}/static/problem-workspace-client-controllers.js`)
+  const controllerResponse = await fetch(
+    `${base}/static/workspace-client/controllers/index.js`
+  )
   assert.equal(controllerResponse.status, 200)
   assert.equal(controllerResponse.headers.get("content-type")?.includes("javascript"), true)
   const controllerText = await controllerResponse.text()
   assert.equal(controllerText.includes("export { EditorController }"), true)
 
-  const sharedControllerResponse = await fetch(`${base}/static/problem-workspace-client-controller-shared.js`)
+  const sharedControllerResponse = await fetch(
+    `${base}/static/workspace-client/shared/dom-utils.js`
+  )
   assert.equal(sharedControllerResponse.status, 200)
   assert.equal(sharedControllerResponse.headers.get("content-type")?.includes("javascript"), true)
   const sharedControllerText = await sharedControllerResponse.text()
@@ -161,21 +180,27 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(sharedControllerText.includes("setText"), true)
   assert.equal(sharedControllerText.includes("setClassFlag"), true)
 
-  const editorControllerResponse = await fetch(`${base}/static/problem-workspace-client-editor-controller.js`)
+  const editorControllerResponse = await fetch(
+    `${base}/static/workspace-client/controllers/editor-controller.js`
+  )
   assert.equal(editorControllerResponse.status, 200)
   assert.equal(editorControllerResponse.headers.get("content-type")?.includes("javascript"), true)
   const editorControllerText = await editorControllerResponse.text()
   assert.equal(editorControllerText.includes("class EditorController"), true)
   assert.equal(editorControllerText.includes("key !== \"Tab\""), true)
 
-  const workspaceControllersResponse = await fetch(`${base}/static/problem-workspace-client-workspace-controllers.js`)
+  const workspaceControllersResponse = await fetch(
+    `${base}/static/workspace-client/controllers/workspace-controllers.js`
+  )
   assert.equal(workspaceControllersResponse.status, 200)
   assert.equal(workspaceControllersResponse.headers.get("content-type")?.includes("javascript"), true)
   const workspaceControllersText = await workspaceControllersResponse.text()
   assert.equal(workspaceControllersText.includes("class QuestionLibraryController"), true)
   assert.equal(workspaceControllersText.includes("class VisibleTestCaseController"), true)
 
-  const sessionControllersResponse = await fetch(`${base}/static/problem-workspace-client-session-controllers.js`)
+  const sessionControllersResponse = await fetch(
+    `${base}/static/workspace-client/api/session-controllers.js`
+  )
   assert.equal(sessionControllersResponse.status, 200)
   assert.equal(sessionControllersResponse.headers.get("content-type")?.includes("javascript"), true)
   const sessionControllersText = await sessionControllersResponse.text()
@@ -186,7 +211,9 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(sessionControllersText.includes("$ run #"), true)
   assert.equal(sessionControllersText.includes("30-minute cap reached"), true)
 
-  const topicControllerResponse = await fetch(`${base}/static/problem-workspace-client-topic-controller.js`)
+  const topicControllerResponse = await fetch(
+    `${base}/static/workspace-client/controllers/topic-controller.js`
+  )
   assert.equal(topicControllerResponse.status, 200)
   assert.equal(topicControllerResponse.headers.get("content-type")?.includes("javascript"), true)
   const topicControllerText = await topicControllerResponse.text()

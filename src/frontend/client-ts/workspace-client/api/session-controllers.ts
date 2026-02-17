@@ -1,6 +1,6 @@
 /* Runtime/session API adapters and submission controllers. */
 
-import { setText } from "./problem-workspace-client-controller-shared.js"
+import { setText } from "../shared/dom-utils.js"
 import type {
   ApiEnvelope,
   ButtonNodeLike,
@@ -16,7 +16,7 @@ import type {
   SubmitSessionResponsePayload,
   TextNodeLike,
   WorkspaceCorrectness
-} from "./problem-workspace-client-types.js"
+} from "../shared/types.js"
 
 type JsonMap = Record<string, unknown>
 

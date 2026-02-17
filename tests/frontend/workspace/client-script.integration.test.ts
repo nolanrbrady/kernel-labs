@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { createContext } from "node:vm"
-import { initializeProblemWorkspaceClient } from "../src/frontend/client-ts/problem-workspace-client.js"
+import { initializeProblemWorkspaceClient } from "../../../src/frontend/client-ts/workspace-client/index.js"
 
 type EventHandler = (event?: {
   key?: string

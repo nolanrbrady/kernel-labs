@@ -7,11 +7,11 @@
     "lib": ["ES2022", "DOM"],
     "types": [],
     "skipLibCheck": true,
-    "rootDir": "src/frontend/client-ts",
-    "outDir": "src/frontend/.generated-client",
+    "rootDir": "src/frontend/client-ts/workspace-client",
+    "outDir": "dist/static/workspace-client",
     "sourceMap": false,
     "declaration": false,
     "removeComments": false
   },
-  "include": ["src/frontend/client-ts/**/*.ts"]
+  "include": ["src/frontend/client-ts/workspace-client/**/*.ts"]
 }

@@ -4,7 +4,7 @@ import {
   QuestionCatalog,
   VisibleTestCaseTracker,
   SuggestTopicFormValidator
-} from "../src/frontend/client-ts/problem-workspace-client-domain.js"
+} from "../../../src/frontend/client-ts/workspace-client/domain/models.js"
 import {
   createWorkspaceApiAdapters,
   EditorController,
@@ -14,7 +14,7 @@ import {
   SessionController,
   SubmissionController,
   SuggestTopicController
-} from "../src/frontend/client-ts/problem-workspace-client-controllers.js"
+} from "../../../src/frontend/client-ts/workspace-client/controllers/index.js"
 
 type EventHandler = (event?: {
   key?: string

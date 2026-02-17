@@ -2,7 +2,19 @@
 
 export type WorkspaceCorrectness = "pass" | "partial" | "fail"
 
-export type ProgressSnapshotLike = Record<string, unknown>
+export type ProgressAttemptLike = {
+  problemId?: string
+  correctness?: string
+  submittedAt?: string
+  [key: string]: unknown
+}
+
+export type ProgressSnapshotLike = {
+  version: number
+  completedProblemIds: string[]
+  attemptHistory: ProgressAttemptLike[]
+  [key: string]: unknown
+}
 
 export type FetchLike = (
   input: string | URL | Request,
@@ -75,6 +87,10 @@ export type EventNodeLike = {
   addEventListener: (eventName: string, handler: EventHandlerLike) => void
 }
 
+export type AttributeNodeLike = {
+  setAttribute?: (name: string, value: string) => void
+}
+
 export type TextNodeLike = {
   textContent: string
 }
@@ -85,11 +101,93 @@ export type ClassNameNodeLike = {
 
 export type TabNodeLike = ClassNameNodeLike & {
   setAttribute?: (name: string, value: string) => void
-  ariaSelected?: string
+  ariaSelected?: string | null
 }
 
 export type ButtonNodeLike = EventNodeLike & {
   disabled: boolean
+}
+
+export type ValueNodeLike = {
+  value: string
+}
+
+export type InputNodeLike = EventNodeLike & ValueNodeLike
+
+export type InnerHtmlNodeLike = {
+  innerHTML: string
+}
+
+export type ScrollNodeLike = {
+  scrollTop: number
+  scrollLeft: number
+}
+
+export type PanelNodeLike = {
+  hidden: boolean
+}
+
+export type KeyEventLike = {
+  key?: string
+  ctrlKey?: boolean
+  metaKey?: boolean
+  altKey?: boolean
+  preventDefault?: () => void
+  target?: unknown
+}
+
+export type SimpleSubmitEventLike = {
+  preventDefault?: () => void
+}
+
+export type DocumentNodeLike = {
+  getElementById: (id: string) => unknown
+}
+
+export type QuestionCatalogEntry = {
+  id: string
+  title: string
+  problemType: string
+  summary: string
+  estimatedMinutes: number
+}
+
+export type VisibleTestCaseState = {
+  statusLabel: string
+  isPass: boolean
+  isFail: boolean
+}
+
+export type VisibleTestCaseStateMap = Record<string, VisibleTestCaseState>
+
+export type VisibleTestCaseSummary = {
+  statusByCaseId: VisibleTestCaseStateMap
+  passedCount: number
+  totalCount: number
+}
+
+export type VisibleTestCaseResultLike = {
+  id?: string
+  passed?: boolean
+  [key: string]: unknown
+}
+
+export type SuggestTopicFieldValues = {
+  title: string
+  problemType: string
+  difficulty: string
+  learningObjective: string
+  context: string
+  inputSpecification: string
+  outputSpecification: string
+  constraintsAndEdgeCases: string
+  starterSignature: string
+  visibleTestCasePlan: string
+}
+
+export type SuggestTopicValidationResult = {
+  isValid: boolean
+  missingLabels: string[]
 }
 
 export type CodeEditorNodeLike = EventNodeLike & {
