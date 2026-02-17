@@ -268,8 +268,21 @@ const DEFAULT_WORKSPACE_PROBLEM: WorkspaceProblem = {
       note: "Foundational paper introducing Transformer attention."
     }
   ],
-  starterCode:
-    "import numpy as np\\n\\n\\ndef scaled_dot_product_attention(q, k, v, mask=None):\\n    \"\"\"Scaled dot-product attention (2D toy formulation).\\n\\n    Shapes:\\n      q, k, v: [seq_len, d_k]\\n      mask (optional): [seq_len, seq_len] additive bias applied before softmax\\n\\n    Returns:\\n      context: [seq_len, d_k]\\n    \"\"\"\\n    # TODO: implement attention core\\n    pass"
+  starterCode: `import numpy as np
+
+
+def scaled_dot_product_attention(q, k, v, mask=None):
+    """Scaled dot-product attention (2D toy formulation).
+
+    Shapes:
+      q, k, v: [seq_len, d_k]
+      mask (optional): [seq_len, seq_len] additive bias applied before softmax
+
+    Returns:
+      context: [seq_len, d_k]
+    """
+    # TODO: implement attention core
+    pass`
 }
 
 function buildDefaultWorkspaceProblem(

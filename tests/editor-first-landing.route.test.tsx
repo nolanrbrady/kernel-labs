@@ -12,7 +12,8 @@ test("editor-first landing route is anonymous and mounted at root path", () => {
   const route = createEditorFirstLandingRoute({
     id: "attention_scaled_dot_product_v1",
     title: "Implement Scaled Dot-Product Attention",
-    starterCode: "def scaled_dot_product_attention(q, k, v):\n    pass"
+    starterCode: `def scaled_dot_product_attention(q, k, v):
+    pass`
   })
 
   assert.equal(route.path, "/")
@@ -82,7 +83,8 @@ test("editor-first screen renders starter code with run/submit and account CTA",
         estimatedMinutes: 30
       }
     ],
-    starterCode: "def layer_norm(x, gamma, beta, eps=1e-5):\n    pass"
+    starterCode: `def layer_norm(x, gamma, beta, eps=1e-5):
+    pass`
   })
 
   const markup = renderToStaticMarkup(<ProblemWorkspaceScreen route={route} />)

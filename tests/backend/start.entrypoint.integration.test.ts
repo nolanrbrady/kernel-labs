@@ -63,6 +63,14 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(rootHtml.includes("starter-code-editor"), true)
   assert.equal(rootHtml.includes("starter-code-highlight"), true)
   assert.equal(rootHtml.includes("import numpy as np"), true)
+  assert.equal(
+    rootHtml.includes("def scaled_dot_product_attention(q, k, v, mask=None):\n"),
+    true
+  )
+  assert.equal(
+    rootHtml.includes("def scaled_dot_product_attention(q, k, v, mask=None):\\n"),
+    false
+  )
   assert.equal(rootHtml.includes("import torch"), false)
   assert.equal(rootHtml.includes("import pandas as pd"), false)
   assert.equal(rootHtml.includes("Session status"), true)
