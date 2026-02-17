@@ -32,7 +32,7 @@ test("runtime run success path executes submitted code against deterministic toy
     assert.equal(Array.isArray(successfulRun.output), true)
     assert.deepEqual(successfulRun.output, fixture?.expectedOutput)
     assert.equal(Array.isArray(successfulRun.testCaseResults), true)
-    assert.equal(successfulRun.testCaseResults.length > 0, true)
+    assert.equal(successfulRun.testCaseResults.length, fixture?.testCases.length ?? 0)
     assert.equal(successfulRun.testCaseResults.every((entry) => entry.passed), true)
     assert.equal(typeof successfulRun.runtimeStdout, "string")
     assert.equal(successfulRun.preloadedPackages.includes("numpy"), true)

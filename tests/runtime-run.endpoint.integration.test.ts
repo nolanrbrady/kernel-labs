@@ -47,7 +47,7 @@ test("runtime run endpoint executes submitted code on deterministic input", asyn
     assert.equal(Array.isArray(payload.output), true)
     assert.deepEqual(payload.output, fixture?.expectedOutput)
     assert.equal(Array.isArray(payload.testCaseResults), true)
-    assert.equal(payload.testCaseResults.length > 0, true)
+    assert.equal(payload.testCaseResults.length, fixture?.testCases.length ?? 0)
     assert.equal(
       (payload.testCaseResults as Array<{ passed: boolean }>).every((entry) => {
         return entry.passed

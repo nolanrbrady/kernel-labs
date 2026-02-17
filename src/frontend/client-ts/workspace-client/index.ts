@@ -216,6 +216,14 @@ export function initializeProblemWorkspaceClient(): void {
       existingOutput.length > 0 ? `${existingOutput}\n${text}` : text
   }
 
+  function clearDebugOutput(): void {
+    if (!debugShellOutput) {
+      return
+    }
+
+    debugShellOutput.textContent = ""
+  }
+
   function formatDebugValue(value: unknown): string {
     try {
       return JSON.stringify(value, null, 2)
@@ -343,6 +351,7 @@ export function initializeProblemWorkspaceClient(): void {
     scheduleStatus,
     api: apiAdapters,
     appendDebugLine,
+    clearDebugOutput,
     formatDebugValue,
     resetVisibleTestCaseStatuses,
     applyVisibleTestCaseResults,

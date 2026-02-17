@@ -383,7 +383,7 @@ test("workspace client script wires run then submit and stores anonymous progres
   assert.equal(submitButton.disabled, false)
 })
 
-test("workspace client script appends repeated run logs for iterative debugging", async () => {
+test("workspace client script resets terminal output on each run", async () => {
   const runButton = createFakeElement()
   const submitButton = createFakeElement()
   const codeEditor = createFakeElement("", "def solve(x):\n    return x")
@@ -484,7 +484,7 @@ test("workspace client script appends repeated run logs for iterative debugging"
   assert.equal(fetchCalls[1]?.input, "/api/evaluator/evaluate")
   assert.equal(fetchCalls[2]?.input, "/api/runtime/run")
   assert.equal(fetchCalls[3]?.input, "/api/evaluator/evaluate")
-  assert.equal(debugShellOutput.textContent.includes("$ run #1"), true)
+  assert.equal(debugShellOutput.textContent.includes("$ run #1"), false)
   assert.equal(debugShellOutput.textContent.includes("$ run #2"), true)
   assert.equal(
     debugShellOutput.textContent.includes("> evaluator: pass - All checks passed."),

@@ -223,6 +223,7 @@ function loadControllerClasses() {
           evaluateOutput: (problemId: string, candidateOutput: unknown) => Promise<ApiAdapterResult>
         }
         appendDebugLine: (text: string) => void
+        clearDebugOutput?: () => void
         formatDebugValue: (value: unknown) => string
         resetVisibleTestCaseStatuses: (statusLabel: string) => void
         applyVisibleTestCaseResults: (results: unknown[]) => void
@@ -397,6 +398,7 @@ test("session controller runs runtime and evaluator flow with deterministic UI u
   const debugLines: string[] = []
   const resetStatuses: string[] = []
   let appliedResults: unknown[] = []
+  let clearDebugCalls = 0
 
   const sessionController = new controllers.SessionController({
     problemId: "attention_scaled_dot_product_v1",
@@ -433,6 +435,9 @@ test("session controller runs runtime and evaluator flow with deterministic UI u
     appendDebugLine(text: string) {
       debugLines.push(text)
     },
+    clearDebugOutput() {
+      clearDebugCalls += 1
+    },
     formatDebugValue(value: unknown) {
       return JSON.stringify(value, null, 2)
     },
@@ -458,6 +463,7 @@ test("session controller runs runtime and evaluator flow with deterministic UI u
   assert.equal(sessionStatus.textContent, "Session in progress.")
   assert.equal(scheduleStatus.textContent, "Scheduling status: waiting for submission.")
   assert.deepEqual(resetStatuses, ["Running..."])
+  assert.equal(clearDebugCalls, 1)
   assert.deepEqual(appliedResults, [{ id: "case_1", passed: true }])
   assert.equal(debugLines.includes("$ run #1 (attention_scaled_dot_product_v1)"), true)
   assert.equal(debugLines.includes("> evaluator: partial - Shape is correct; value drift remains."), true)
@@ -466,6 +472,91 @@ test("session controller runs runtime and evaluator flow with deterministic UI u
     correctness: "partial",
     explanation: "Shape is correct; value drift remains."
   })
+})
+
+test("session controller marks evaluation fail when runtime test cases fail", async () => {
+  const { controllers } = loadControllerClasses()
+  const runButton = createFakeElement()
+  const codeEditor = createFakeElement("", "def solve(x):\n  return x")
+  const runStatus = createFakeElement()
+  const evaluationStatus = createFakeElement()
+  const sessionStatus = createFakeElement()
+  const scheduleStatus = createFakeElement()
+  const debugLines: string[] = []
+  let evaluateCalls = 0
+
+  const sessionController = new controllers.SessionController({
+    problemId: "attention_scaled_dot_product_v1",
+    codeEditor,
+    runButton,
+    runStatus,
+    evaluationStatus,
+    sessionStatus,
+    scheduleStatus,
+    api: {
+      async runRuntime() {
+        return {
+          ok: true,
+          status: 200,
+          payload: {
+            status: "success",
+            message: "Run complete on toy tensors.",
+            output: [[1, 2]],
+            testCaseResults: [
+              { id: "case_1", passed: true },
+              { id: "case_2", passed: false }
+            ]
+          }
+        }
+      },
+      async evaluateOutput() {
+        evaluateCalls += 1
+        return {
+          ok: true,
+          status: 200,
+          payload: {
+            correctness: "pass",
+            explanation: "Should not run when runtime test cases fail."
+          }
+        }
+      }
+    },
+    appendDebugLine(text: string) {
+      debugLines.push(text)
+    },
+    formatDebugValue(value: unknown) {
+      return JSON.stringify(value, null, 2)
+    },
+    resetVisibleTestCaseStatuses() {
+      return undefined
+    },
+    applyVisibleTestCaseResults() {
+      return undefined
+    },
+    nowProvider() {
+      return 1_733_000_000_000
+    }
+  })
+
+  await sessionController.runCurrentCode()
+
+  assert.equal(evaluateCalls, 0)
+  assert.equal(
+    runStatus.textContent,
+    "Run completed, but one or more test cases failed."
+  )
+  assert.equal(
+    evaluationStatus.textContent,
+    "Evaluation: fail - 1/2 runtime test case(s) failed."
+  )
+  assert.deepEqual(sessionController.getLastEvaluation(), {
+    correctness: "fail",
+    explanation: "1/2 runtime test case(s) failed."
+  })
+  assert.equal(
+    debugLines.includes("> runtime test cases: 1/2 passed."),
+    true
+  )
 })
 
 test("submission controller submits session and keeps done state when sync fails", async () => {

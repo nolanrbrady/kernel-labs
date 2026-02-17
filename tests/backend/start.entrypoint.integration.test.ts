@@ -248,6 +248,8 @@ test("workspace route query switches the active problem card and payload", async
   assert.equal(rootResponse.status, 200)
   assert.equal(rootHtml.includes("data-problem-id=\"mlp_affine_relu_step_v1\""), true)
   assert.equal(rootHtml.includes("Implement a Single MLP Affine + ReLU Step"), true)
+  assert.equal(rootHtml.includes("case_1_basic_relu"), true)
+  assert.equal(rootHtml.includes("case_2_all_negative_pre_activation"), true)
   assert.equal(rootHtml.includes("question-library-item-link is-active"), true)
   assert.equal(rootHtml.includes("Active</span>"), true)
   assert.equal(rootHtml.includes("Showing 3 of 3 questions."), true)

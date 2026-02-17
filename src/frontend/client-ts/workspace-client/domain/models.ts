@@ -61,6 +61,15 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object"
 }
 
+function isResultWithPassedFlag(
+  value: unknown
+): value is VisibleTestCaseResultLike & { passed: boolean } {
+  return (
+    isPlainObject(value) &&
+    typeof value.passed === "boolean"
+  )
+}
+
 function createEmptyProgressSnapshot(): ProgressSnapshotLike {
   return {
     version: 1,
@@ -382,11 +391,15 @@ export class VisibleTestCaseTracker {
 
   summarizeResults(results: unknown): VisibleTestCaseSummary {
     const resultByCaseId: Record<string, VisibleTestCaseResultLike> = {}
+    const orderedResults: Array<VisibleTestCaseResultLike & { passed: boolean }> = []
     if (Array.isArray(results)) {
       for (let resultIndex = 0; resultIndex < results.length; resultIndex += 1) {
         const resultEntry = results[resultIndex]
         if (isPlainObject(resultEntry) && typeof resultEntry.id === "string") {
           resultByCaseId[resultEntry.id] = resultEntry
+        }
+        if (isResultWithPassedFlag(resultEntry)) {
+          orderedResults.push(resultEntry)
         }
       }
     }
@@ -396,7 +409,7 @@ export class VisibleTestCaseTracker {
 
     for (let index = 0; index < this.visibleTestCaseIds.length; index += 1) {
       const caseId = this.visibleTestCaseIds[index]
-      const caseResult = resultByCaseId[caseId]
+      const caseResult = resultByCaseId[caseId] ?? orderedResults[index]
 
       if (!caseResult) {
         statusByCaseId[caseId] = {

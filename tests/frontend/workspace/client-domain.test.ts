@@ -168,6 +168,47 @@ test("visible test-case tracker summarizes statuses for pass/fail/not-run paths"
   )
 })
 
+test("visible test-case tracker falls back to positional mapping when ids differ", () => {
+  const { VisibleTestCaseTracker } = loadDomainClasses()
+  const tracker = new VisibleTestCaseTracker(
+    JSON.stringify(["mlp_affine_relu_step_v1_case_1", "mlp_affine_relu_step_v1_case_2"])
+  )
+
+  const resultState = tracker.summarizeResults([
+    {
+      id: "case_1_basic_relu",
+      passed: true
+    },
+    {
+      id: "case_2_all_negative_pre_activation",
+      passed: false
+    }
+  ])
+
+  const resultStatusByCaseId = resultState.statusByCaseId as Record<
+    string,
+    { statusLabel: string; isPass: boolean; isFail: boolean }
+  >
+
+  assert.equal(resultState.passedCount, 1)
+  assert.deepEqual(
+    toPlain(resultStatusByCaseId["mlp_affine_relu_step_v1_case_1"]),
+    {
+      statusLabel: "Pass",
+      isPass: true,
+      isFail: false
+    }
+  )
+  assert.deepEqual(
+    toPlain(resultStatusByCaseId["mlp_affine_relu_step_v1_case_2"]),
+    {
+      statusLabel: "Fail",
+      isPass: false,
+      isFail: true
+    }
+  )
+})
+
 test("suggest-topic validator enforces required fields and builds completion summary", () => {
   const { SuggestTopicFormValidator } = loadDomainClasses()
   const validator = new SuggestTopicFormValidator()

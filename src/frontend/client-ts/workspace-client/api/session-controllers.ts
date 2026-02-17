@@ -64,6 +64,7 @@ type SessionControllerOptions = {
   scheduleStatus: TextNodeLike | null
   api: Pick<WorkspaceApiAdapters, "runRuntime" | "evaluateOutput">
   appendDebugLine?: (text: string) => void
+  clearDebugOutput?: () => void
   formatDebugValue?: (value: unknown) => string
   resetVisibleTestCaseStatuses?: (statusLabel: string) => void
   applyVisibleTestCaseResults?: (results: unknown[] | undefined) => void
@@ -182,6 +183,44 @@ function isRuntimeSuccessPayload(
   return payload.status === "success"
 }
 
+function summarizeRuntimeTestCases(results: unknown[] | undefined): {
+  total: number
+  passed: number
+  failed: number
+} {
+  if (!Array.isArray(results)) {
+    return {
+      total: 0,
+      passed: 0,
+      failed: 0
+    }
+  }
+
+  const statuses = results
+    .map((entry) => {
+      if (
+        typeof entry === "object" &&
+        entry !== null &&
+        "passed" in entry &&
+        typeof (entry as { passed?: unknown }).passed === "boolean"
+      ) {
+        return (entry as { passed: boolean }).passed
+      }
+
+      return null
+    })
+    .filter((passed): passed is boolean => passed !== null)
+
+  const passed = statuses.filter((value) => value).length
+  const total = statuses.length
+
+  return {
+    total,
+    passed,
+    failed: total - passed
+  }
+}
+
 export class SessionController {
   private readonly problemId: string
   private readonly codeEditor: CodeEditorNodeLike
@@ -192,6 +231,7 @@ export class SessionController {
   private readonly scheduleStatus: TextNodeLike | null
   private readonly api: Pick<WorkspaceApiAdapters, "runRuntime" | "evaluateOutput">
   private readonly appendDebugLine?: (text: string) => void
+  private readonly clearDebugOutput?: () => void
   private readonly formatDebugValue?: (value: unknown) => string
   private readonly resetVisibleTestCaseStatuses?: (statusLabel: string) => void
   private readonly applyVisibleTestCaseResults?: (
@@ -213,6 +253,7 @@ export class SessionController {
     this.scheduleStatus = options.scheduleStatus
     this.api = options.api
     this.appendDebugLine = options.appendDebugLine
+    this.clearDebugOutput = options.clearDebugOutput
     this.formatDebugValue = options.formatDebugValue
     this.resetVisibleTestCaseStatuses = options.resetVisibleTestCaseStatuses
     this.applyVisibleTestCaseResults = options.applyVisibleTestCaseResults
@@ -254,6 +295,12 @@ export class SessionController {
     }
   }
 
+  private clearDebug(): void {
+    if (typeof this.clearDebugOutput === "function") {
+      this.clearDebugOutput()
+    }
+  }
+
   private resetVisibleCases(statusLabel: string): void {
     if (typeof this.resetVisibleTestCaseStatuses === "function") {
       this.resetVisibleTestCaseStatuses(statusLabel)
@@ -271,6 +318,7 @@ export class SessionController {
       this.runButton.disabled = true
     }
     this.runAttemptCount += 1
+    this.clearDebug()
 
     setText(this.runStatus, "Running code against toy tensors...")
     setText(this.evaluationStatus, "Awaiting evaluator result...")
@@ -349,6 +397,29 @@ export class SessionController {
       this.appendDebug("> output:")
       this.appendDebug(this.formatValueForDebug(runtimePayload.output))
       this.applyVisibleCaseResults(runtimePayload.testCaseResults)
+
+      const runtimeCaseSummary = summarizeRuntimeTestCases(
+        runtimePayload.testCaseResults
+      )
+      if (runtimeCaseSummary.total > 0) {
+        this.appendDebug(
+          `> runtime test cases: ${runtimeCaseSummary.passed}/${runtimeCaseSummary.total} passed.`
+        )
+      }
+      if (runtimeCaseSummary.failed > 0) {
+        const explanation = `${runtimeCaseSummary.failed}/${runtimeCaseSummary.total} runtime test case(s) failed.`
+        setText(
+          this.runStatus,
+          "Run completed, but one or more test cases failed."
+        )
+        setText(this.evaluationStatus, `Evaluation: fail - ${explanation}`)
+        this.lastEvaluation = {
+          correctness: "fail",
+          explanation
+        }
+        this.appendDebug(`! runtime test-case gate: ${explanation}`)
+        return
+      }
 
       const evaluatorResult = await this.api.evaluateOutput(
         this.problemId,

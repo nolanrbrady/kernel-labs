@@ -495,6 +495,37 @@ Task line template:
   - Problem-bank lint test.
   - Reference-solution runtime regression test.
 
+- [ ] P2-24 | Animated Submission Success Moment | Add a lightweight celebratory success animation + copy treatment after submit to make completion feel rewarding without introducing guilt mechanics. | blocked_by=none | verify=make test;make lint
+  PRD refs: 5, 18
+  Acceptance:
+  - Successful submit shows a distinct animated success state (micro-interaction + visual emphasis) in the workspace.
+  - Animation is brief, non-blocking, and respects reduced-motion preferences.
+  - Incorrect submit remains supportive and never punitive.
+  Required tests:
+  - Route/start integration assertions for success-state animation markup/classes.
+  - Deterministic client-script integration test verifying success-state timing/visibility and reduced-motion fallback behavior.
+
+- [ ] P2-25 | Prominent Next Presentation Countdown | Make "days until next presentation" the primary spaced-repetition feedback signal in submit/done surfaces. | blocked_by=none | verify=make test;make lint
+  PRD refs: 5, 9, 18
+  Acceptance:
+  - Submit/done UI elevates the next presentation date/countdown as the primary scheduler message.
+  - Countdown wording is clear, supportive, and avoids backlog/debt framing.
+  - Existing scheduler decision details remain available but visually secondary.
+  Required tests:
+  - Route/start integration assertions for countdown placement and prominence.
+  - Deterministic client-script integration test for scheduler-response rendering of countdown text.
+
+- [ ] P2-26 | Runtime Interpreter Verification + Config | Verify and expose which Python interpreter executes user code, with explicit runtime diagnostics and env-based override support. | blocked_by=none | verify=make test;make lint
+  PRD refs: 5, 6, 8, 18
+  Acceptance:
+  - Runtime resolves interpreter from a configurable env var (defaulting safely when unset) instead of hardcoded binary assumptions.
+  - Run diagnostics include interpreter path/version and preloaded package availability in a stable, testable payload.
+  - Startup/runtime failure clearly reports actionable guidance when interpreter is missing or incompatible.
+  Required tests:
+  - Runtime unit tests for interpreter resolution precedence and fallback behavior.
+  - Runtime endpoint integration test asserting interpreter diagnostics fields and failure messaging.
+  - Client-script integration assertion for displaying interpreter diagnostics in debug output.
+
 ## Ralph Loop Handoff Log
 
 Use this template for every completed task:

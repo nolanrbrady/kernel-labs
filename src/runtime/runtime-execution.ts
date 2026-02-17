@@ -451,16 +451,13 @@ export function runStarterCodeAgainstToyInputs(
     })
   }
 
-  const testCaseResults = fixture.testCases.map((testCase, index) => {
-    const testCaseExecutionResult =
-      index === 0
-        ? executionResult
-        : runPythonUserCode({
-            userCode,
-            functionName: fixture.functionName,
-            inputs: testCase.inputs,
-            inputOrder: fixture.inputOrder
-          })
+  const testCaseResults = fixture.testCases.map((testCase) => {
+    const testCaseExecutionResult = runPythonUserCode({
+      userCode,
+      functionName: fixture.functionName,
+      inputs: testCase.inputs,
+      inputOrder: fixture.inputOrder
+    })
 
     return evaluateSingleTestCase({
       testCaseId: testCase.id,

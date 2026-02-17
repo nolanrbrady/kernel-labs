@@ -178,28 +178,16 @@ function buildSeedWorkspaceProblem(
     ],
     architectureUses: [seedProblem.learning_context],
     evaluationChecklist: seedProblem.pass_criteria.checks.map((check) => check.description),
-    visibleTestCases: [
-      {
-        id: `${seedProblem.id}_case_1`,
-        name: "Case 1 - Visible Oracle Baseline",
-        inputSummary:
-          seedProblem.evaluation_artifacts.visible_tests[0]?.input_summary ??
-          seedProblem.inputs.tensor_shapes.join(", "),
-        expectedOutputSummary:
-          seedProblem.evaluation_artifacts.visible_tests[0]?.expected_behavior ??
-          `Output shape ${seedProblem.output_contract.shape}.`
-      },
-      {
-        id: `${seedProblem.id}_case_2`,
-        name: "Case 2 - Deterministic Robustness",
-        inputSummary:
-          seedProblem.evaluation_artifacts.visible_tests[1]?.input_summary ??
-          `Datatype(s): ${seedProblem.inputs.datatypes.join(", ")}.`,
-        expectedOutputSummary:
-          seedProblem.evaluation_artifacts.visible_tests[1]?.expected_behavior ??
-          seedProblem.output_contract.numerical_properties.join("; ")
+    visibleTestCases: seedProblem.evaluation_artifacts.visible_tests.slice(0, 2).map(
+      (testCase, index) => {
+        return {
+          id: testCase.id,
+          name: `Case ${index + 1} - ${testCase.purpose}`,
+          inputSummary: testCase.input_summary,
+          expectedOutputSummary: testCase.expected_behavior
+        }
       }
-    ],
+    ),
     paperLinks: seedProblem.resources.map((resource) => {
       return {
         title: resource.title,
