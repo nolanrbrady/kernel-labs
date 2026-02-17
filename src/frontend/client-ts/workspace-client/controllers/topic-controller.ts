@@ -8,6 +8,8 @@ import type {
   InputNodeLike,
   SimpleSubmitEventLike,
   SuggestTopicFieldValues,
+  SuggestTopicValidationApiResponsePayload,
+  SuggestTopicValidationRequestPayload,
   TextNodeLike,
   ValueNodeLike
 } from "../shared/types.js"
@@ -42,6 +44,17 @@ type SuggestTopicControllerOptions = {
   suggestTopicHintsInput: ValueNodeLike | null
   suggestTopicPaperLinkInput: ValueNodeLike | null
   suggestTopicNotesInput: ValueNodeLike | null
+  api: {
+    validateSuggestedTopic: (
+      payload: SuggestTopicValidationRequestPayload
+    ) => Promise<{
+      ok: boolean
+      status: number
+      payload:
+        | SuggestTopicValidationApiResponsePayload
+        | { message?: string }
+    }>
+  }
   appendDebugLine?: (text: string) => void
 }
 
@@ -68,6 +81,7 @@ export class SuggestTopicController {
   private readonly suggestTopicHintsInput: ValueNodeLike | null
   private readonly suggestTopicPaperLinkInput: ValueNodeLike | null
   private readonly suggestTopicNotesInput: ValueNodeLike | null
+  private readonly api: SuggestTopicControllerOptions["api"]
   private readonly appendDebugLine?: (text: string) => void
 
   constructor(options: SuggestTopicControllerOptions) {
@@ -95,6 +109,7 @@ export class SuggestTopicController {
     this.suggestTopicHintsInput = options.suggestTopicHintsInput
     this.suggestTopicPaperLinkInput = options.suggestTopicPaperLinkInput
     this.suggestTopicNotesInput = options.suggestTopicNotesInput
+    this.api = options.api
     this.appendDebugLine = options.appendDebugLine
   }
 
@@ -158,7 +173,7 @@ export class SuggestTopicController {
     )
   }
 
-  submitForm(event?: SimpleSubmitEventLike): void {
+  async submitForm(event?: SimpleSubmitEventLike): Promise<void> {
     if (event && typeof event.preventDefault === "function") {
       event.preventDefault()
     }
@@ -198,6 +213,81 @@ export class SuggestTopicController {
     const paperLinkValue = this.readInputValue(this.suggestTopicPaperLinkInput)
     const hintsValue = this.readInputValue(this.suggestTopicHintsInput)
     const notesValue = this.readInputValue(this.suggestTopicNotesInput)
+
+    if (this.suggestTopicModalFeedback) {
+      setText(
+        this.suggestTopicModalFeedback,
+        "Running ProblemSpecV2 validation on your suggestion..."
+      )
+    }
+    setText(
+      this.suggestTopicStatus,
+      "Validating topic suggestion against ProblemSpecV2..."
+    )
+
+    let validationPayload: SuggestTopicValidationApiResponsePayload | null = null
+    try {
+      const validationResponse = await this.api.validateSuggestedTopic({
+        ...fieldValues,
+        hints: hintsValue,
+        paperLink: paperLinkValue,
+        notes: notesValue
+      })
+
+      if (!validationResponse.ok) {
+        const failurePayload = validationResponse.payload as { message?: string }
+        setText(
+          this.suggestTopicStatus,
+          failurePayload.message ??
+            "Topic suggestion validation is temporarily unavailable."
+        )
+        if (this.suggestTopicModalFeedback) {
+          setText(
+            this.suggestTopicModalFeedback,
+            "Validation service unavailable. Please retry in a moment."
+          )
+        }
+        this.appendDebug("> topic suggestion validation unavailable.")
+        return
+      }
+
+      validationPayload =
+        validationResponse.payload as SuggestTopicValidationApiResponsePayload
+    } catch (_error) {
+      setText(
+        this.suggestTopicStatus,
+        "Topic suggestion validation encountered a temporary issue."
+      )
+      if (this.suggestTopicModalFeedback) {
+        setText(
+          this.suggestTopicModalFeedback,
+          "Validation service unavailable. Please retry in a moment."
+        )
+      }
+      this.appendDebug("> topic suggestion validation exception.")
+      return
+    }
+
+    if (validationPayload.status === "invalid") {
+      const topErrors = validationPayload.errors.slice(0, 3)
+      if (this.suggestTopicModalFeedback) {
+        setText(
+          this.suggestTopicModalFeedback,
+          topErrors.length > 0
+            ? `ProblemSpecV2 requirements not met: ${topErrors.join(" | ")}`
+            : "ProblemSpecV2 requirements not met. Add more detail and retry."
+        )
+      }
+      setText(
+        this.suggestTopicStatus,
+        "Topic suggestion needs more detail to satisfy ProblemSpecV2."
+      )
+      this.appendDebug(
+        `> topic suggestion rejected by ProblemSpecV2: ${validationPayload.errors.length} error(s).`
+      )
+      return
+    }
+
     const completionSummary = this.validator.buildCompletionSummary(
       problemTypeValue,
       titleValue
@@ -207,13 +297,21 @@ export class SuggestTopicController {
     if (this.suggestTopicModalFeedback) {
       setText(
         this.suggestTopicModalFeedback,
-        "Captured. We can convert this into a deterministic, testable problem spec."
+        "Captured and validated against ProblemSpecV2. The card remains needs_review until publish checks pass."
       )
     }
 
     this.appendDebug(
       `> topic suggestion submitted: ${problemTypeValue} | ${difficultyValue} | ${titleValue}`
     )
+    this.appendDebug(
+      `> topic suggestion ProblemSpecV2: ${validationPayload.summary} (${validationPayload.provisionalSpecId})`
+    )
+    if (validationPayload.warnings.length > 0) {
+      this.appendDebug(
+        `> topic suggestion warnings: ${validationPayload.warnings.slice(0, 3).join(" | ")}`
+      )
+    }
     if (paperLinkValue) {
       this.appendDebug(`> suggested paper: ${paperLinkValue}`)
     }

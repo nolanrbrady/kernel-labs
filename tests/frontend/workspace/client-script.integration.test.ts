@@ -1499,6 +1499,7 @@ test("workspace question library supports fuzzy search, type filtering, and sugg
     ["suggest-topic-notes", suggestTopicNotesInput],
     ["debug-shell-output", debugShellOutput]
   ])
+  const fetchCalls: FetchCall[] = []
   const context = createContext({
     document: {
       querySelector(selector: string) {
@@ -1512,8 +1513,29 @@ test("workspace question library supports fuzzy search, type filtering, and sugg
         return elements.get(id) ?? null
       }
     },
-    fetch: async () => {
-      return createMockResponse({ status: "ok" })
+    fetch: async (
+      input: string | URL | Request,
+      init?: RequestInit
+    ) => {
+      const inputText =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url
+      fetchCalls.push({ input: inputText, init })
+
+      if (inputText === "/api/problems/suggest-topic") {
+        return createMockResponse({
+          status: "valid",
+          summary: "ProblemSpecV2 validation passed.",
+          errors: [],
+          warnings: [],
+          provisionalSpecId: "rotary_positional_embeddings_on_toy_tensors_v1"
+        })
+      }
+
+      throw new Error(`Unexpected fetch input: ${inputText}`)
     },
     localStorage: {
       getItem() {
@@ -1613,6 +1635,12 @@ test("workspace question library supports fuzzy search, type filtering, and sugg
 
   assert.equal(prevented, true)
   assert.equal(suggestTopicModal.hidden, true)
+  assert.equal(fetchCalls.length, 1)
+  assert.equal(fetchCalls[0]?.input, "/api/problems/suggest-topic")
+  assert.equal(
+    JSON.parse(String(fetchCalls[0]?.init?.body ?? "{}")).title,
+    "Rotary Positional Embeddings On Toy Tensors"
+  )
   assert.equal(
     suggestTopicStatus.textContent,
     "Topic suggestion captured for Attention: Rotary Positional Embeddings On Toy Tensors."

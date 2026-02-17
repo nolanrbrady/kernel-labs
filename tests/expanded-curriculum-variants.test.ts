@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { evaluateSeedProblemContract } from "../src/evaluator/seed-problem-evaluator-contract.js"
-import { getSeedProblemPackV1 } from "../src/problems/seed-problem-pack.js"
+import { getSeedProblemPack } from "../src/problems/seed-problem-pack.js"
 
 function parseShape(shapeText: string): [number, number] {
   const matched = shapeText.match(/\[(\d+)\s*,\s*(\d+)\]/)
@@ -15,7 +15,7 @@ function parseShape(shapeText: string): [number, number] {
 }
 
 test("expanded curriculum includes conditioning/adaptation/positional variants", () => {
-  const seedProblems = getSeedProblemPackV1()
+  const seedProblems = getSeedProblemPack()
   const expandedCategories = [
     "Conditioning & Modulation",
     "Adaptation & Efficiency",
@@ -41,7 +41,7 @@ test("expanded curriculum includes conditioning/adaptation/positional variants",
 })
 
 test("expanded curriculum has evaluator contract coverage across variants", () => {
-  const seedProblems = getSeedProblemPackV1().filter((problem) => {
+  const seedProblems = getSeedProblemPack().filter((problem) => {
     return [
       "Conditioning & Modulation",
       "Adaptation & Efficiency",
@@ -50,7 +50,7 @@ test("expanded curriculum has evaluator contract coverage across variants", () =
   })
 
   seedProblems.forEach((problem) => {
-    const [rows, columns] = parseShape(problem.expected_output.shape)
+    const [rows, columns] = parseShape(problem.output_contract.shape)
     const candidateOutput = Array.from({ length: rows }, () => {
       return Array.from({ length: columns }, () => 0.125)
     })

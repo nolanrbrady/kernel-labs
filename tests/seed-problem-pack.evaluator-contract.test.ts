@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { evaluateSeedProblemContract } from "../src/evaluator/seed-problem-evaluator-contract.js"
-import { getSeedProblemPackV1 } from "../src/problems/seed-problem-pack.js"
+import { getSeedProblemPack } from "../src/problems/seed-problem-pack.js"
 
 function parseShape(shapeText: string): [number, number] {
   const matched = shapeText.match(/\[(\d+)\s*,\s*(\d+)\]/)
@@ -15,10 +15,10 @@ function parseShape(shapeText: string): [number, number] {
 }
 
 test("seed problems satisfy evaluator contract for shape and numerical sanity", () => {
-  const seedProblems = getSeedProblemPackV1()
+  const seedProblems = getSeedProblemPack()
 
   seedProblems.forEach((problem) => {
-    const [rows, columns] = parseShape(problem.expected_output.shape)
+    const [rows, columns] = parseShape(problem.output_contract.shape)
     const candidateOutput = Array.from({ length: rows }, () => {
       return Array.from({ length: columns }, () => 0.25)
     })

@@ -252,6 +252,13 @@ export function initializeProblemWorkspaceClient(): void {
     }
   }
 
+  const apiAdapters = createWorkspaceApiAdapters({
+    fetchImpl:
+      typeof fetch === "function"
+        ? (fetch.bind(globalThis) as FetchLike)
+        : null
+  })
+
   // ─── UI Controllers ───
 
   const editorController = new EditorController({
@@ -304,6 +311,9 @@ export function initializeProblemWorkspaceClient(): void {
     suggestTopicHintsInput,
     suggestTopicPaperLinkInput,
     suggestTopicNotesInput,
+    api: {
+      validateSuggestedTopic: apiAdapters.validateSuggestedTopic
+    },
     appendDebugLine
   })
 
@@ -323,12 +333,6 @@ export function initializeProblemWorkspaceClient(): void {
     visibleTestCaseController.applyResults(results)
   }
 
-  const apiAdapters = createWorkspaceApiAdapters({
-    fetchImpl:
-      typeof fetch === "function"
-        ? (fetch.bind(globalThis) as FetchLike)
-        : null
-  })
   const sessionController = new SessionController({
     problemId,
     codeEditor,

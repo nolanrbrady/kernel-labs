@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { getSeedProblemPackV1 } from "../src/problems/seed-problem-pack.js"
+import { getSeedProblemPack } from "../src/problems/seed-problem-pack.js"
 import { getRuntimeProblemFixture } from "../src/problems/runtime-problem-fixtures.js"
 import { getReferencePythonSolution } from "../src/problems/reference-python-solutions.js"
 import { runStarterCodeAgainstToyInputs } from "../src/runtime/runtime-execution.js"
@@ -42,7 +42,7 @@ function areMatricesClose(actual: number[][], expected: number[][]): boolean {
 }
 
 test("reference Python solutions match runtime fixtures across the problem bank", () => {
-  const seedIds = getSeedProblemPackV1().map((problem) => problem.id)
+  const seedIds = getSeedProblemPack().map((problem) => problem.id)
   const problemIds = Array.from(new Set([...seedIds, "attention_scaled_dot_product_v1"]))
 
   problemIds.forEach((problemId) => {

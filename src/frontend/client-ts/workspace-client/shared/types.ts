@@ -221,6 +221,30 @@ export type SuggestTopicValidationResult = {
   missingLabels: string[]
 }
 
+export type SuggestTopicValidationRequestPayload = {
+  title: string
+  problemType: string
+  difficulty: string
+  learningObjective: string
+  context: string
+  inputSpecification: string
+  outputSpecification: string
+  constraintsAndEdgeCases: string
+  starterSignature: string
+  visibleTestCasePlan: string
+  hints?: string
+  paperLink?: string
+  notes?: string
+}
+
+export type SuggestTopicValidationApiResponsePayload = {
+  status: "valid" | "invalid"
+  summary: string
+  errors: string[]
+  warnings: string[]
+  provisionalSpecId: string
+}
+
 export type CodeEditorNodeLike = EventNodeLike & {
   value: string
   selectionStart?: number

@@ -2,7 +2,7 @@ import {
   type QuestionLibraryItem,
   type WorkspaceProblem
 } from "../../frontend/problem-workspace-route.js"
-import { getSeedProblemPackV1 } from "../../problems/seed-problem-pack.js"
+import { getSeedProblemPack } from "../../problems/seed-problem-pack.js"
 import { createProblemReviewQueueStore } from "../../problems/problem-review-queue.js"
 
 export const DEFAULT_WORKSPACE_PROBLEM_ID = "attention_scaled_dot_product_v1"
@@ -13,7 +13,7 @@ const SEED_PROBLEM_WEIGHT_STEP = 0.012
 const SEED_PROBLEM_WEIGHT_BASE = 0.94
 const DEFAULT_WORKSPACE_PROBLEM_WEIGHT = 0.955
 
-export const SEED_PROBLEM_PACK = getSeedProblemPackV1()
+export const SEED_PROBLEM_PACK = getSeedProblemPack()
 
 const SEED_PROBLEM_BY_ID = new Map(
   SEED_PROBLEM_PACK.map((problem) => {
@@ -168,8 +168,8 @@ function buildSeedWorkspaceProblem(
       ...seedProblem.inputs.constraints
     ].join(" | "),
     expectedOutputSpecification: [
-      `Expected shape: ${seedProblem.expected_output.shape}`,
-      ...seedProblem.expected_output.numerical_properties
+      `Expected shape: ${seedProblem.output_contract.shape}`,
+      ...seedProblem.output_contract.numerical_properties
     ].join(" | "),
     formulaNotes: [
       "\\text{Implement the core forward pass for this primitive.}",
@@ -177,19 +177,27 @@ function buildSeedWorkspaceProblem(
       "\\text{Return finite deterministic outputs for toy tensors.}"
     ],
     architectureUses: [seedProblem.learning_context],
-    evaluationChecklist: seedProblem.evaluation_logic.checks,
+    evaluationChecklist: seedProblem.pass_criteria.checks.map((check) => check.description),
     visibleTestCases: [
       {
         id: `${seedProblem.id}_case_1`,
-        name: "Case 1 - Shape Contract",
-        inputSummary: seedProblem.inputs.tensor_shapes.join(", "),
-        expectedOutputSummary: `Output shape ${seedProblem.expected_output.shape}.`
+        name: "Case 1 - Visible Oracle Baseline",
+        inputSummary:
+          seedProblem.evaluation_artifacts.visible_tests[0]?.input_summary ??
+          seedProblem.inputs.tensor_shapes.join(", "),
+        expectedOutputSummary:
+          seedProblem.evaluation_artifacts.visible_tests[0]?.expected_behavior ??
+          `Output shape ${seedProblem.output_contract.shape}.`
       },
       {
         id: `${seedProblem.id}_case_2`,
-        name: "Case 2 - Deterministic Sanity",
-        inputSummary: `Datatype(s): ${seedProblem.inputs.datatypes.join(", ")}.`,
-        expectedOutputSummary: seedProblem.expected_output.numerical_properties.join("; ")
+        name: "Case 2 - Deterministic Robustness",
+        inputSummary:
+          seedProblem.evaluation_artifacts.visible_tests[1]?.input_summary ??
+          `Datatype(s): ${seedProblem.inputs.datatypes.join(", ")}.`,
+        expectedOutputSummary:
+          seedProblem.evaluation_artifacts.visible_tests[1]?.expected_behavior ??
+          seedProblem.output_contract.numerical_properties.join("; ")
       }
     ],
     paperLinks: seedProblem.resources.map((resource) => {

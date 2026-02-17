@@ -8,13 +8,86 @@ import {
   PROBLEM_FLAG_REASONS,
   type ProblemReviewQueueStore
 } from "../../problems/problem-review-queue.js"
-import { getSeedProblemPackV1 } from "../../problems/seed-problem-pack.js"
+import { getSeedProblemPack } from "../../problems/seed-problem-pack.js"
+import {
+  summarizeSuggestTopicValidationResult,
+  validateSuggestTopicDraftAgainstProblemSpecV2
+} from "../../problems/suggest-topic-spec-v2.js"
 
 export function registerProblemRoutes(options: {
   app: Express
   problemReviewQueueStore: ProblemReviewQueueStore
 }): void {
   const { app, problemReviewQueueStore } = options
+
+  app.post("/api/problems/suggest-topic", (request: Request, response: Response) => {
+    const rawBody = request.body as {
+      title?: unknown
+      problemType?: unknown
+      difficulty?: unknown
+      learningObjective?: unknown
+      context?: unknown
+      inputSpecification?: unknown
+      outputSpecification?: unknown
+      constraintsAndEdgeCases?: unknown
+      starterSignature?: unknown
+      visibleTestCasePlan?: unknown
+      hints?: unknown
+      paperLink?: unknown
+      notes?: unknown
+    }
+
+    if (
+      typeof rawBody.title !== "string" ||
+      typeof rawBody.problemType !== "string" ||
+      typeof rawBody.difficulty !== "string" ||
+      typeof rawBody.learningObjective !== "string" ||
+      typeof rawBody.context !== "string" ||
+      typeof rawBody.inputSpecification !== "string" ||
+      typeof rawBody.outputSpecification !== "string" ||
+      typeof rawBody.constraintsAndEdgeCases !== "string" ||
+      typeof rawBody.starterSignature !== "string" ||
+      typeof rawBody.visibleTestCasePlan !== "string" ||
+      (typeof rawBody.hints !== "undefined" &&
+        typeof rawBody.hints !== "string") ||
+      (typeof rawBody.paperLink !== "undefined" &&
+        typeof rawBody.paperLink !== "string") ||
+      (typeof rawBody.notes !== "undefined" &&
+        typeof rawBody.notes !== "string")
+    ) {
+      response.status(400).json({
+        status: "failure",
+        errorCode: "INVALID_REQUEST",
+        message:
+          "Suggest topic request requires all core string fields and optional string metadata."
+      })
+      return
+    }
+
+    const validation = validateSuggestTopicDraftAgainstProblemSpecV2({
+      title: rawBody.title,
+      problemType: rawBody.problemType,
+      difficulty: rawBody.difficulty,
+      learningObjective: rawBody.learningObjective,
+      context: rawBody.context,
+      inputSpecification: rawBody.inputSpecification,
+      outputSpecification: rawBody.outputSpecification,
+      constraintsAndEdgeCases: rawBody.constraintsAndEdgeCases,
+      starterSignature: rawBody.starterSignature,
+      visibleTestCasePlan: rawBody.visibleTestCasePlan,
+      hints: rawBody.hints,
+      paperLink: rawBody.paperLink,
+      notes: rawBody.notes
+    })
+
+    response.status(200).json({
+      status: validation.ok ? "valid" : "invalid",
+      summary: summarizeSuggestTopicValidationResult(validation),
+      errors: validation.errors,
+      warnings: validation.warnings,
+      provisionalSpecId: validation.provisionalSpec.id
+    })
+  })
 
   app.post("/api/problems/flag", (request: Request, response: Response) => {
     const rawBody = request.body as {
@@ -116,6 +189,6 @@ export function registerProblemRoutes(options: {
   )
 
   app.get("/api/problems/seed", (_request: Request, response: Response) => {
-    response.status(200).json(getSeedProblemPackV1())
+    response.status(200).json(getSeedProblemPack())
   })
 }

@@ -151,6 +151,7 @@ function loadControllerClasses() {
         syncAnonymousProgress: (payload: Record<string, unknown>) => Promise<ApiAdapterResult>
         requestSchedulerDecision: (payload: Record<string, unknown>) => Promise<ApiAdapterResult>
         flagProblem: (payload: Record<string, unknown>) => Promise<ApiAdapterResult>
+        validateSuggestedTopic: (payload: Record<string, unknown>) => Promise<ApiAdapterResult>
       }
       EditorController: new (options: {
         codeEditor: FakeElement
@@ -260,8 +261,36 @@ function loadControllerClasses() {
         hasSubmitted: () => boolean
         isSubmissionInProgress: () => boolean
       }
-      SuggestTopicController: new (options: Record<string, unknown>) => {
+      SuggestTopicController: new (options: {
+        validator: unknown
+        questionTypeFilter: FakeElement
+        suggestTopicButton: FakeElement
+        suggestTopicStatus: FakeElement
+        suggestTopicModal: FakeElement
+        suggestTopicCloseButton: FakeElement
+        suggestTopicCancelButton: FakeElement
+        suggestTopicForm: FakeElement
+        suggestTopicModalFeedback: FakeElement
+        suggestTopicTitleInput: FakeElement
+        suggestTopicProblemTypeInput: FakeElement
+        suggestTopicDifficultyInput: FakeElement
+        suggestTopicLearningObjectiveInput: FakeElement
+        suggestTopicContextInput: FakeElement
+        suggestTopicInputSpecInput: FakeElement
+        suggestTopicOutputSpecInput: FakeElement
+        suggestTopicConstraintsInput: FakeElement
+        suggestTopicStarterSignatureInput: FakeElement
+        suggestTopicVisibleTestsInput: FakeElement
+        suggestTopicHintsInput: FakeElement
+        suggestTopicPaperLinkInput: FakeElement
+        suggestTopicNotesInput: FakeElement
+        api: {
+          validateSuggestedTopic: (payload: Record<string, unknown>) => Promise<ApiAdapterResult>
+        }
+        appendDebugLine: (text: string) => void
+      }) => {
         bind: () => void
+        submitForm: () => Promise<void>
       }
       ProblemFlagController: new (options: {
         problemId: string
@@ -311,15 +340,29 @@ test("workspace API adapters post JSON payloads and return parsed envelopes", as
     reason: "incorrect_output",
     sessionId: "session-1"
   })
+  const suggestTopicResult = await adapters.validateSuggestedTopic({
+    title: "Attention mask semantics",
+    problemType: "Attention",
+    difficulty: "Medium",
+    learningObjective: "Implement masking semantics in attention.",
+    context: "Masking controls attention targets in toy tensors.",
+    inputSpecification: "q: [2, 2], k: [2, 2]",
+    outputSpecification: "weights: [2, 2] finite",
+    constraintsAndEdgeCases: "toy tensors only; finite outputs",
+    starterSignature: "def solve(q, k):",
+    visibleTestCasePlan: "Case 1 baseline; Case 2 masked"
+  })
 
   assert.equal(runResult.ok, true)
   assert.equal(runResult.status, 200)
   assert.deepEqual(runResult.payload, { status: "ok", endpoint: "/api/runtime/run" })
   assert.equal(submitResult.ok, true)
   assert.equal(flagResult.ok, true)
+  assert.equal(suggestTopicResult.ok, true)
   assert.equal(calls[0]?.input, "/api/runtime/run")
   assert.equal(calls[1]?.input, "/api/session/submit")
   assert.equal(calls[2]?.input, "/api/problems/flag")
+  assert.equal(calls[3]?.input, "/api/problems/suggest-topic")
   assert.equal(
     String(calls[0]?.init?.headers ? (calls[0]?.init?.headers as Record<string, string>)["content-type"] : ""),
     "application/json"
@@ -336,6 +379,10 @@ test("workspace API adapters post JSON payloads and return parsed envelopes", as
       reason: "incorrect_output",
       sessionId: "session-1"
     }
+  )
+  assert.equal(
+    JSON.parse(String(calls[3]?.init?.body ?? "{}")).title,
+    "Attention mask semantics"
   )
 })
 
@@ -833,6 +880,7 @@ test("suggest topic controller validates required fields and captures submission
   const suggestTopicNotesInput = createFakeElement()
   const questionTypeFilter = createFakeElement("", "Attention")
   const debugLines: string[] = []
+  let topicValidationCalls = 0
 
   const controller = new controllers.SuggestTopicController({
     validator,
@@ -857,6 +905,22 @@ test("suggest topic controller validates required fields and captures submission
     suggestTopicHintsInput,
     suggestTopicPaperLinkInput,
     suggestTopicNotesInput,
+    api: {
+      async validateSuggestedTopic() {
+        topicValidationCalls += 1
+        return {
+          ok: true,
+          status: 200,
+          payload: {
+            status: "valid",
+            summary: "ProblemSpecV2 validation passed.",
+            errors: [],
+            warnings: [],
+            provisionalSpecId: "rotary_position_embeddings_v1"
+          }
+        }
+      }
+    },
     appendDebugLine(text: string) {
       debugLines.push(text)
     }
@@ -895,6 +959,7 @@ test("suggest topic controller validates required fields and captures submission
     }
   })
 
+  assert.equal(topicValidationCalls, 1)
   assert.equal(suggestTopicModal.hidden, true)
   assert.equal(
     suggestTopicStatus.textContent,
@@ -904,6 +969,12 @@ test("suggest topic controller validates required fields and captures submission
     debugLines.includes(
       "> topic suggestion submitted: Attention | Medium | Rotary Position Embeddings"
     ),
+    true
+  )
+  assert.equal(
+    debugLines.some((entry) => {
+      return entry.includes("topic suggestion ProblemSpecV2")
+    }),
     true
   )
 })

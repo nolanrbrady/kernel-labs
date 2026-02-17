@@ -1,7 +1,7 @@
 import {
-  getSeedProblemPackV1,
-  type SeedProblemDefinition
+  getSeedProblemPack
 } from "../problems/seed-problem-pack.js"
+import type { ProblemSpecV2 } from "../problems/problem-spec-v2.js"
 
 export type SeedProblemEvaluationResult = {
   problemId: string
@@ -28,8 +28,8 @@ function parseShape(shapeText: string): [number, number] {
   return [Number.parseInt(matched[1], 10), Number.parseInt(matched[2], 10)]
 }
 
-function findProblem(problemId: string): SeedProblemDefinition {
-  const problem = getSeedProblemPackV1().find((candidate) => {
+function findProblem(problemId: string): ProblemSpecV2 {
+  const problem = getSeedProblemPack().find((candidate) => {
     return candidate.id === problemId
   })
 
@@ -45,7 +45,7 @@ export function evaluateSeedProblemContract(options: {
   candidateOutput: number[][]
 }): SeedProblemEvaluationResult {
   const problem = findProblem(options.problemId)
-  const expectedShape = parseShape(problem.expected_output.shape)
+  const expectedShape = parseShape(problem.output_contract.shape)
   const rowsMatch = options.candidateOutput.length === expectedShape[0]
   const columnsMatch = options.candidateOutput.every((row) => {
     return row.length === expectedShape[1]

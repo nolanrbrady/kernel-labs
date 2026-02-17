@@ -718,6 +718,17 @@ export function ProblemWorkspaceScreen(props: {
               Submit
             </button>
           </nav>
+          <section className="debug-shell" aria-label="debug-shell">
+            <header className="debug-shell-header">
+              <p className="debug-shell-title">Debug Console</p>
+              <p className="debug-shell-hint">
+                Run as many times as needed before submit.
+              </p>
+            </header>
+            <pre className="debug-shell-output" id="debug-shell-output">
+              $ ready: run your code to inspect runtime and evaluator output.
+            </pre>
+          </section>
           <section className="problem-flag-panel" aria-label="problem-flag-panel">
             <div className="problem-flag-controls">
               <label className="problem-flag-label" htmlFor="flag-problem-reason">
@@ -746,17 +757,6 @@ export function ProblemWorkspaceScreen(props: {
             <p className="flag-problem-status" id="flag-problem-status">
               Spot an issue? Flag it and this card will be reviewed.
             </p>
-          </section>
-          <section className="debug-shell" aria-label="debug-shell">
-            <header className="debug-shell-header">
-              <p className="debug-shell-title">Debug Console</p>
-              <p className="debug-shell-hint">
-                Run as many times as needed before submit.
-              </p>
-            </header>
-            <pre className="debug-shell-output" id="debug-shell-output">
-              $ ready: run your code to inspect runtime and evaluator output.
-            </pre>
           </section>
           <section
             className="visible-test-cases-panel"

@@ -16,6 +16,8 @@ import type {
   SubmitSessionResponsePayload,
   FlagProblemRequestPayload,
   FlagProblemResponsePayload,
+  SuggestTopicValidationRequestPayload,
+  SuggestTopicValidationApiResponsePayload,
   TextNodeLike,
   WorkspaceCorrectness
 } from "../shared/types.js"
@@ -43,6 +45,9 @@ export type WorkspaceApiAdapters = {
   flagProblem: (
     payload: FlagProblemRequestPayload
   ) => Promise<ApiEnvelope<FlagProblemResponsePayload>>
+  validateSuggestedTopic: (
+    payload: SuggestTopicValidationRequestPayload
+  ) => Promise<ApiEnvelope<SuggestTopicValidationApiResponsePayload>>
 }
 
 type CreateWorkspaceApiAdaptersOptions = {
@@ -158,6 +163,13 @@ export function createWorkspaceApiAdapters(
       return postJson<FlagProblemResponsePayload>(
         fetchImpl,
         "/api/problems/flag",
+        payload
+      )
+    },
+    validateSuggestedTopic(payload) {
+      return postJson<SuggestTopicValidationApiResponsePayload>(
+        fetchImpl,
+        "/api/problems/suggest-topic",
         payload
       )
     }

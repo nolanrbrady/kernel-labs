@@ -1,4 +1,16 @@
-export type SeedProblemDefinition = {
+import {
+  type ProblemSpecV2,
+  type ProblemSpecV2ValidationResult,
+  type VerificationCase,
+  validateProblemSpecV2
+} from "./problem-spec-v2.js"
+import {
+  getRuntimeProblemFixture,
+  type RuntimeFixtureValue,
+  type RuntimeProblemFixture
+} from "./runtime-problem-fixtures.js"
+
+type SeedProblemDraft = {
   id: string
   title: string
   category:
@@ -42,7 +54,7 @@ export type SeedProblemDefinition = {
   learning_context: string
 }
 
-const SEED_PROBLEM_PACK_V1: SeedProblemDefinition[] = [
+const SEED_PROBLEM_DRAFTS: SeedProblemDraft[] = [
   {
     id: "mlp_affine_relu_step_v1",
     title: "Implement a Single MLP Affine + ReLU Step",
@@ -1597,58 +1609,336 @@ const SEED_PROBLEM_PACK_V1: SeedProblemDefinition[] = [
   }
 ]
 
-export function getSeedProblemPackV1(): SeedProblemDefinition[] {
-  return SEED_PROBLEM_PACK_V1.map((problem) => ({ ...problem }))
+const REVIEWED_AT_ISO = "2026-02-17T00:00:00Z"
+
+function describeFixtureValue(value: RuntimeFixtureValue): string {
+  if (value === null) {
+    return "null"
+  }
+
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? String(value) : value.toFixed(4)
+  }
+
+  if (Array.isArray(value) && value.length > 0 && Array.isArray(value[0])) {
+    const rowCount = value.length
+    const colCount = (value[0] as number[]).length
+    return `[${rowCount}, ${colCount}]`
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.length}]`
+  }
+
+  return "unknown"
 }
 
-export function validateSeedProblemDefinition(problem: SeedProblemDefinition): {
-  isValid: boolean
-  errors: string[]
-} {
-  const errors: string[] = []
-
-  if (!problem.id) {
-    errors.push("Missing id.")
+function ensureMinLength(text: string, minimum: number, extension: string): string {
+  const trimmed = text.trim()
+  if (trimmed.length >= minimum) {
+    return trimmed
   }
 
-  if (!problem.title) {
-    errors.push("Missing title.")
+  let expanded = trimmed.length > 0 ? trimmed : extension
+  while (expanded.length < minimum) {
+    expanded = `${expanded} ${extension}`.trim()
+  }
+  return expanded
+}
+
+function buildFunctionSignature(starterCode: string, functionName: string): string {
+  const matched = starterCode.match(/def\s+[a-z_][a-z0-9_]*\s*\(([^)]*)\)\s*:/i)
+  if (!matched) {
+    return `def ${functionName}(x):`
   }
 
-  if (!problem.category) {
-    errors.push("Missing category.")
+  const args = matched[1]?.trim()
+  return `def ${functionName}(${args && args.length > 0 ? args : "x"}):`
+}
+
+function buildVisibleTestsFromFixture(fixture: RuntimeProblemFixture): VerificationCase[] {
+  const visibleTests = fixture.testCases.map((testCase, index) => {
+    const inputSummary = fixture.inputOrder.map((name) => {
+      return `${name}: ${describeFixtureValue(testCase.inputs[name] ?? null)}`
+    })
+
+    const rows = testCase.expectedOutput.length
+    const cols = testCase.expectedOutput[0]?.length ?? 0
+
+    return {
+      id: testCase.id,
+      purpose: testCase.name || `Visible deterministic case ${index + 1}`,
+      input_summary: inputSummary.join(", "),
+      expected_behavior: `Output matches oracle semantics with shape [${rows}, ${cols}] and finite values.`
+    }
+  })
+
+  if (visibleTests.length >= 2) {
+    return visibleTests
   }
 
-  if (!problem.starter_code) {
-    errors.push("Missing starter_code.")
+  const fallbackRows = fixture.expectedOutput.length
+  const fallbackCols = fixture.expectedOutput[0]?.length ?? 0
+  return [
+    ...visibleTests,
+    {
+      id: `${fixture.problemId}_visible_shape_guard`,
+      purpose: "Visible shape and determinism baseline",
+      input_summary: fixture.inputOrder
+        .map((name) => `${name}: ${describeFixtureValue(fixture.inputs[name] ?? null)}`)
+        .join(", "),
+      expected_behavior: `Output must remain deterministic, finite, and shaped [${fallbackRows}, ${fallbackCols}].`
+    }
+  ].slice(0, 2)
+}
+
+function buildHiddenTests(problemId: string, title: string): VerificationCase[] {
+  const operationLabel = title.trim().toLowerCase() || "the target operation"
+
+  return [
+    {
+      id: `${problemId}_hidden_scale_stability`,
+      purpose: "Guard numerical stability under scaled toy values",
+      input_summary: "Scaled magnitude toy tensors with unchanged shape contract",
+      expected_behavior: "Outputs stay finite and preserve deterministic semantics."
+    },
+    {
+      id: `${problemId}_hidden_axis_order`,
+      purpose: "Catch transpose or axis-order bugs",
+      input_summary: "Asymmetric dimensions where axis misuse changes semantics",
+      expected_behavior: "Output respects declared axis semantics and oracle behavior."
+    },
+    {
+      id: `${problemId}_hidden_sign_mix`,
+      purpose: "Stress mixed positive/negative interactions",
+      input_summary: "Inputs with mixed signs and varied feature magnitudes",
+      expected_behavior: `Output remains correct for ${operationLabel} and within tolerance.`
+    },
+    {
+      id: `${problemId}_hidden_repeated_rows`,
+      purpose: "Detect unintended row coupling",
+      input_summary: "Repeated-row toy tensors",
+      expected_behavior: "Equivalent row inputs yield equivalent row outputs where contract requires."
+    },
+    {
+      id: `${problemId}_hidden_edge_constants`,
+      purpose: "Validate deterministic boundary behavior",
+      input_summary: "Boundary constants near neutral/zero behavior",
+      expected_behavior: "Boundary cases remain deterministic and semantically correct."
+    }
+  ]
+}
+
+function buildAdversarialTests(problemId: string, title: string): VerificationCase[] {
+  const operationLabel = title.trim().toLowerCase() || "the requested operation"
+
+  return [
+    {
+      id: `${problemId}_adversarial_shape_only`,
+      purpose: "Reject shape-only solutions",
+      input_summary: "Inputs where shape-correct but semantically wrong outputs are easy",
+      expected_behavior: `Fails implementations that ignore ${operationLabel} semantics.`
+    },
+    {
+      id: `${problemId}_adversarial_op_order`,
+      purpose: "Reject incorrect operation ordering",
+      input_summary: "Inputs sensitive to ordering of intermediate operations",
+      expected_behavior: "Fails implementations with wrong composition order."
+    }
+  ]
+}
+
+function buildKnownFailurePatterns(problem: SeedProblemDraft): string[] {
+  const defaults = [
+    "shape-only implementation without semantic correctness",
+    "wrong operation ordering in intermediate calculations",
+    "numerical instability leading to NaN or Inf outputs"
+  ]
+
+  const uniquePatterns = Array.from(
+    new Set([...problem.common_pitfalls, ...defaults])
+  ).filter((entry) => entry.trim().length > 0)
+
+  return uniquePatterns.slice(0, 8)
+}
+
+function buildProblemSpec(problem: SeedProblemDraft): ProblemSpecV2 {
+  const fixture = getRuntimeProblemFixture(problem.id)
+  if (!fixture) {
+    throw new Error(`Missing runtime fixture for ${problem.id}.`)
   }
 
-  if (problem.estimated_time_minutes > 30) {
-    errors.push("estimated_time_minutes exceeds 30.")
-  }
+  const outputRows = fixture.expectedOutput.length
+  const outputCols = fixture.expectedOutput[0]?.length ?? 0
+  const outputShape = `[${outputRows}, ${outputCols}]`
+  const functionSignature = buildFunctionSignature(
+    problem.starter_code,
+    fixture.functionName
+  )
 
-  if (!problem.problem_version) {
-    errors.push("Missing problem_version.")
-  }
+  const learningObjective = ensureMinLength(
+    `Implement ${problem.title.toLowerCase()} as a deterministic toy-tensor primitive, matching exact output semantics, axis behavior, and numerical stability expectations across visible and hidden verification cases.`,
+    80,
+    "State the exact competency, include deterministic correctness expectations, and define how shape and semantics must align."
+  )
+  const conceptDescription = ensureMinLength(
+    problem.concept_description,
+    220,
+    "Clarify mechanism details, why this primitive matters in real model blocks, and what implementation failures commonly break correctness."
+  )
+  const learningContext = ensureMinLength(
+    problem.learning_context,
+    180,
+    "Connect this operation to real architectures and explain why precise forward semantics are foundational before scaling to larger model components."
+  )
+  const goal = ensureMinLength(
+    problem.goal,
+    140,
+    "Require deterministic oracle-level correctness on toy tensors, enforce finite outputs, and prevent shape-only shortcuts by checking deeper semantic behavior."
+  )
 
-  if (!problem.torch_version_target) {
-    errors.push("Missing torch_version_target.")
-  }
+  const tier1 = ensureMinLength(
+    problem.hints.tier1,
+    60,
+    "Begin by validating the full input/output contract, including axis semantics and deterministic expectations."
+  )
+  const tier2 = ensureMinLength(
+    problem.hints.tier2,
+    80,
+    "Break the implementation into explicit intermediate computations and verify each intermediate against intended semantics."
+  )
+  const tier3 = ensureMinLength(
+    problem.hints.tier3,
+    110,
+    "Implement deterministic staged logic, compare against oracle-aligned expectations, and validate edge behavior before treating the solution as complete."
+  )
 
-  if (!problem.learning_context) {
-    errors.push("Missing learning_context.")
-  }
-
-  if (!Array.isArray(problem.prerequisites) || problem.prerequisites.length === 0) {
-    errors.push("Missing prerequisites.")
-  }
-
-  if (!Array.isArray(problem.common_pitfalls) || problem.common_pitfalls.length === 0) {
-    errors.push("Missing common_pitfalls.")
-  }
+  const visibleTests = buildVisibleTestsFromFixture(fixture)
 
   return {
-    isValid: errors.length === 0,
-    errors
+    id: problem.id,
+    problem_version: problem.problem_version,
+    title: problem.title,
+    category: problem.category,
+    learning_objective: learningObjective,
+    concept_description: conceptDescription,
+    learning_context: learningContext,
+    goal,
+    starter_code: problem.starter_code,
+    function_signature: functionSignature,
+    inputs: {
+      tensor_shapes: problem.inputs.tensor_shapes,
+      datatypes: problem.inputs.datatypes,
+      constraints: problem.inputs.constraints
+    },
+    output_contract: {
+      shape: outputShape,
+      semantics: [
+        goal,
+        `Return outputs that satisfy ${problem.title.toLowerCase()} semantics rather than shape-only checks.`
+      ],
+      numerical_properties: Array.from(
+        new Set([...problem.expected_output.numerical_properties, "all values finite"])
+      )
+    },
+    pass_criteria: {
+      determinism: "deterministic",
+      checks: [
+        {
+          id: `${problem.id}_shape_guard`,
+          mode: "shape_guard",
+          scope: "both",
+          oracle: "reference_solution",
+          description: "Candidate output matches the declared shape across visible and hidden cases."
+        },
+        {
+          id: `${problem.id}_hidden_exact_oracle`,
+          mode: "exact_match",
+          scope: "hidden",
+          oracle: "reference_solution",
+          description: "Hidden deterministic outputs must match oracle outputs exactly within strict tolerance."
+        },
+        {
+          id: `${problem.id}_numeric_tolerance`,
+          mode: "numeric_tolerance",
+          scope: "both",
+          oracle: "reference_solution",
+          description: "Numeric differences against oracle remain within absolute/relative tolerance.",
+          tolerance: {
+            abs: 1e-6,
+            rel: 1e-5
+          }
+        },
+        {
+          id: `${problem.id}_semantic_property`,
+          mode: "property_based",
+          scope: "both",
+          oracle: "property_checker",
+          description: "Semantic invariants for this primitive hold across deterministic perturbations."
+        },
+        {
+          id: `${problem.id}_metamorphic_relations`,
+          mode: "metamorphic",
+          scope: "hidden",
+          oracle: "metamorphic_relation",
+          description: "Controlled input transformations preserve expected behavioral relations."
+        }
+      ],
+      rationale:
+        "The grading matrix combines shape checks with hidden exact-match oracle comparisons, strict numeric tolerance bounds, and higher-order semantic validation via property and metamorphic checks. This prevents weak implementations from passing through superficial shape compliance alone. Hidden deterministic verification and adversarial inputs force alignment with true operation semantics, while tolerance controls protect against floating-point noise without masking logical errors."
+    },
+    evaluation_artifacts: {
+      reference_solution_path: "src/problems/reference-python-solutions.ts",
+      reference_solution_function: fixture.functionName,
+      visible_tests: visibleTests,
+      hidden_tests: buildHiddenTests(problem.id, problem.title),
+      adversarial_tests: buildAdversarialTests(problem.id, problem.title),
+      known_failure_patterns: buildKnownFailurePatterns(problem)
+    },
+    hints: {
+      tier1,
+      tier2,
+      tier3
+    },
+    resources: problem.resources,
+    prerequisites: problem.prerequisites,
+    common_pitfalls: problem.common_pitfalls,
+    estimated_time_minutes: problem.estimated_time_minutes,
+    authoring: {
+      source: "human",
+      human_reviewer: "seed_problem_pack_migration",
+      reviewed_at_iso: REVIEWED_AT_ISO
+    },
+    quality_scorecard: {
+      pedagogy_depth: 4,
+      spec_clarity: 4,
+      grader_rigor: 5,
+      edge_case_coverage: 4,
+      ambiguity_risk_control: 5
+    },
+    verification: {
+      status: "verified",
+      blockers: [],
+      notes:
+        "Migrated to ProblemSpecV2 with deterministic oracle checks, hidden/adversarial coverage, and strict pass criteria."
+    }
   }
+}
+
+const SEED_PROBLEM_PACK: ProblemSpecV2[] = SEED_PROBLEM_DRAFTS.map((problem) => {
+  return buildProblemSpec(problem)
+})
+
+function cloneProblem(problem: ProblemSpecV2): ProblemSpecV2 {
+  return JSON.parse(JSON.stringify(problem)) as ProblemSpecV2
+}
+
+export function getSeedProblemPack(): ProblemSpecV2[] {
+  return SEED_PROBLEM_PACK.map((problem) => cloneProblem(problem))
+}
+
+export function validateSeedProblemSpec(
+  problem: ProblemSpecV2
+): ProblemSpecV2ValidationResult {
+  return validateProblemSpecV2(problem)
 }

@@ -47,6 +47,7 @@ This runbook defines how to operate the MVP locally and the minimal path to serv
 - `POST /api/scheduler/decision`: interval + priority calculation
 - `POST /api/scheduler/plan`: one-resurfaced-per-session planning
 - `POST /api/problems/flag`: user flag intake for problem-quality triage
+- `POST /api/problems/suggest-topic`: validates suggest-topic drafts against ProblemSpecV2
 - `GET /api/problems/review-queue`: review queue snapshot + verification statuses
 
 ## Minimal Deployment Path
