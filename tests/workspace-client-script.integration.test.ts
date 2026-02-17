@@ -1,8 +1,15 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+import { join, dirname } from "node:path"
 import test from "node:test"
+import { fileURLToPath } from "node:url"
 import { createContext, runInContext } from "node:vm"
 
-import { getProblemWorkspaceClientScript } from "../src/frontend/problem-workspace-route.js"
+const currentDir = dirname(fileURLToPath(import.meta.url))
+const clientScriptSource = readFileSync(
+  join(currentDir, "..", "src", "frontend", "problem-workspace-client.js"),
+  "utf-8"
+)
 
 type EventHandler = (event?: {
   key?: string
@@ -231,7 +238,7 @@ test("workspace client script wires run then submit and stores anonymous progres
     }
   })
 
-  runInContext(getProblemWorkspaceClientScript(), context)
+  runInContext(clientScriptSource, context)
 
   const runClickHandler = runButton.handlers.get("click")
   const submitClickHandler = submitButton.handlers.get("click")
@@ -435,7 +442,7 @@ test("workspace client script appends repeated run logs for iterative debugging"
     }
   })
 
-  runInContext(getProblemWorkspaceClientScript(), context)
+  runInContext(clientScriptSource, context)
 
   await runButton.handlers.get("click")?.()
   await runButton.handlers.get("click")?.()
@@ -536,7 +543,7 @@ test("workspace client script shows runtime stdout when run fails", async () => 
     }
   })
 
-  runInContext(getProblemWorkspaceClientScript(), context)
+  runInContext(clientScriptSource, context)
 
   await runButton.handlers.get("click")?.()
 
@@ -672,7 +679,7 @@ test("workspace client script auto-submits at 30-minute cap after timer start", 
     }
   })
 
-  runInContext(getProblemWorkspaceClientScript(), context)
+  runInContext(clientScriptSource, context)
 
   await startProblemButton.handlers.get("click")?.()
 
@@ -798,7 +805,7 @@ test("workspace client script starts timer on first typed character in editor", 
     }
   })
 
-  runInContext(getProblemWorkspaceClientScript(), context)
+  runInContext(clientScriptSource, context)
 
   await codeEditor.handlers.get("keydown")?.({
     key: "a"
@@ -919,7 +926,7 @@ test("workspace client script keeps done-state messaging when anonymous sync fai
     }
   })
 
-  runInContext(getProblemWorkspaceClientScript(), context)
+  runInContext(clientScriptSource, context)
 
   await runButton.handlers.get("click")?.()
   await submitButton.handlers.get("click")?.()
@@ -993,7 +1000,7 @@ test("workspace client script inserts indentation when tab is pressed in editor"
     }
   })
 
-  runInContext(getProblemWorkspaceClientScript(), context)
+  runInContext(clientScriptSource, context)
 
   const secondLineStart = codeEditor.value.indexOf("\n") + 1
   codeEditor.selectionStart = secondLineStart
@@ -1077,7 +1084,7 @@ test("workspace client script renders and refreshes syntax highlighting with edi
     }
   })
 
-  runInContext(getProblemWorkspaceClientScript(), context)
+  runInContext(clientScriptSource, context)
 
   assert.equal(codeHighlight.innerHTML.includes("token-keyword"), true)
   assert.equal(codeHighlight.innerHTML.includes("def"), true)
@@ -1172,7 +1179,7 @@ test("workspace client script toggles problem and question-bank tabs", async () 
     }
   })
 
-  runInContext(getProblemWorkspaceClientScript(), context)
+  runInContext(clientScriptSource, context)
 
   assert.equal(workspaceProblemTabPanel.hidden, false)
   assert.equal(workspaceLibraryTabPanel.hidden, true)
@@ -1300,7 +1307,7 @@ test("workspace client script reveals hints in order with supportive messaging",
     }
   })
 
-  runInContext(getProblemWorkspaceClientScript(), context)
+  runInContext(clientScriptSource, context)
 
   await hintTier2Button.handlers.get("click")?.()
   assert.equal(
@@ -1491,7 +1498,7 @@ test("workspace question library supports fuzzy search, type filtering, and sugg
     }
   })
 
-  runInContext(getProblemWorkspaceClientScript(), context)
+  runInContext(clientScriptSource, context)
 
   assert.equal(questionLibraryCount.textContent, "Showing 3 of 3 questions.")
   assert.equal(
@@ -1708,7 +1715,7 @@ test("workspace client script marks visible test-case tabs as pass after success
     }
   })
 
-  runInContext(getProblemWorkspaceClientScript(), context)
+  runInContext(clientScriptSource, context)
 
   await runButton.handlers.get("click")?.()
 

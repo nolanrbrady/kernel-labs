@@ -16,42 +16,42 @@ test("resolvePort rejects invalid values", () => {
 
 test("single start entrypoint serves health API and editor-first workspace", async (t) => {
   const startedServer = await startServer({ port: 0 })
+  const base = `http://127.0.0.1:${startedServer.port}`
 
   t.after(async () => {
     await startedServer.close()
   })
 
-  const healthResponse = await fetch(
-    `http://127.0.0.1:${startedServer.port}/health`
-  )
+  const healthResponse = await fetch(`${base}/health`)
   const healthPayload = await healthResponse.json()
 
   assert.equal(healthResponse.status, 200)
   assert.deepEqual(healthPayload, { ok: true })
 
-  const rootResponse = await fetch(`http://127.0.0.1:${startedServer.port}/`)
+  const rootResponse = await fetch(`${base}/`)
   const rootHtml = await rootResponse.text()
 
   assert.equal(rootResponse.status, 200)
   assert.equal(rootResponse.headers.get("content-type")?.includes("text/html"), true)
+
+  // HTML document references external static assets
+  assert.equal(rootHtml.includes('href="/static/problem-workspace.css?v='), true)
+  assert.equal(rootHtml.includes('src="/static/problem-workspace-client.js?v='), true)
+  assert.equal(rootHtml.includes("data-theme=\"deepmlsr-workspace\""), true)
+
+  // React-rendered workspace markup
   assert.equal(rootHtml.includes("problem-workspace"), true)
   assert.equal(rootHtml.includes("workspace-grid"), true)
   assert.equal(rootHtml.includes("Implement Scaled Dot-Product Attention"), true)
   assert.equal(rootHtml.includes("Run"), true)
   assert.equal(rootHtml.includes("Submit"), true)
-  assert.equal(rootHtml.includes("data-theme=\"deepmlsr-workspace\""), true)
-  assert.equal(rootHtml.includes("@media (max-width: 920px)"), true)
   assert.equal(rootHtml.includes("code-editor-shell"), true)
   assert.equal(rootHtml.includes("starter-code-editor"), true)
   assert.equal(rootHtml.includes("starter-code-highlight"), true)
   assert.equal(rootHtml.includes("import numpy as np"), true)
   assert.equal(rootHtml.includes("import torch"), false)
   assert.equal(rootHtml.includes("import pandas as pd"), false)
-  assert.equal(rootHtml.includes(".token-keyword"), true)
   assert.equal(rootHtml.includes("Session status"), true)
-  assert.equal(rootHtml.includes("/api/runtime/run"), true)
-  assert.equal(rootHtml.includes("/api/session/submit"), true)
-  assert.equal(rootHtml.includes("/api/scheduler/decision"), true)
   assert.equal(rootHtml.includes("hint-tier-1-button"), true)
   assert.equal(rootHtml.includes("hint-tier-2-button"), true)
   assert.equal(rootHtml.includes("hint-tier-3-button"), true)
@@ -72,10 +72,8 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(rootHtml.includes("test-case-panel-case_1_balanced_tokens"), true)
   assert.equal(rootHtml.includes("Primary Papers"), true)
   assert.equal(rootHtml.includes("https://arxiv.org/abs/1706.03762"), true)
-  assert.equal(rootHtml.includes("key !== \"Tab\""), true)
   assert.equal(rootHtml.includes("debug-shell-output"), true)
   assert.equal(rootHtml.includes("Run as many times as needed before submit"), true)
-  assert.equal(rootHtml.includes("$ run #"), true)
   assert.equal(
     rootHtml.indexOf("debug-shell-output") < rootHtml.indexOf("run-status"),
     true
@@ -95,7 +93,6 @@ test("single start entrypoint serves health API and editor-first workspace", asy
     rootHtml.includes("Timer starts when you click Start Problem or type your first character."),
     true
   )
-  assert.equal(rootHtml.includes("30-minute cap reached"), true)
   assert.equal(rootHtml.includes("workspace-tab-problem"), true)
   assert.equal(rootHtml.includes("workspace-tab-library"), true)
   assert.equal(rootHtml.includes("Question Bank"), true)
@@ -118,4 +115,25 @@ test("single start entrypoint serves health API and editor-first workspace", asy
   assert.equal(rootHtml.includes("Showing 11 of 11 questions."), true)
   assert.equal(rootHtml.includes("Implement LayerNorm Forward Pass"), true)
   assert.equal(rootHtml.includes("conditioning_film_affine_shift_scale_v1"), true)
+
+  // Static CSS is served with correct content-type and contains theme rules
+  const cssResponse = await fetch(`${base}/static/problem-workspace.css`)
+  assert.equal(cssResponse.status, 200)
+  assert.equal(cssResponse.headers.get("content-type")?.includes("text/css"), true)
+  const cssText = await cssResponse.text()
+  assert.equal(cssText.includes("@media (max-width: 1024px)"), true)
+  assert.equal(cssText.includes(".token-keyword"), true)
+  assert.equal(cssText.includes("--bg-base"), true)
+
+  // Static JS is served with correct content-type and contains client logic
+  const jsResponse = await fetch(`${base}/static/problem-workspace-client.js`)
+  assert.equal(jsResponse.status, 200)
+  assert.equal(jsResponse.headers.get("content-type")?.includes("javascript"), true)
+  const jsText = await jsResponse.text()
+  assert.equal(jsText.includes("key !== \"Tab\""), true)
+  assert.equal(jsText.includes("/api/runtime/run"), true)
+  assert.equal(jsText.includes("/api/session/submit"), true)
+  assert.equal(jsText.includes("/api/scheduler/decision"), true)
+  assert.equal(jsText.includes("$ run #"), true)
+  assert.equal(jsText.includes("30-minute cap reached"), true)
 })

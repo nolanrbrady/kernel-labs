@@ -204,3 +204,63 @@ test("golden path covers landing, run, submit, schedule update, and session end"
     await apiContext.dispose()
   }
 })
+
+test("workspace UI buttons remain clickable when suggest-topic modal is hidden", async ({
+  page
+}) => {
+  await page.goto(`${baseUrl}/`)
+
+  await expect(page.locator("#suggest-topic-modal")).toBeHidden()
+  await expect(page.locator("#session-timer-status")).toHaveText(
+    "Session timer: not started (30:00 limit)."
+  )
+
+  await page.locator("#start-problem-button").click()
+  await expect(page.locator("#session-timer-status")).toHaveText(
+    "Session timer: 30:00 remaining."
+  )
+
+  await page.locator("#workspace-tab-library").click()
+  await expect(page.locator("#workspace-library-tab-panel")).toBeVisible()
+  await expect(page.locator("#workspace-problem-tab-panel")).toBeHidden()
+
+  await page.locator("#workspace-tab-problem").click()
+  await expect(page.locator("#workspace-problem-tab-panel")).toBeVisible()
+  await expect(page.locator("#workspace-library-tab-panel")).toBeHidden()
+})
+
+test("clicking visible code surface focuses editor and allows typing", async ({
+  page
+}) => {
+  await page.goto(`${baseUrl}/`)
+
+  await expect(page.locator("#session-timer-status")).toHaveText(
+    "Session timer: not started (30:00 limit)."
+  )
+
+  await page.locator(".code-editor-shell").click({ position: { x: 24, y: 24 } })
+  await expect
+    .poll(async () => {
+      return await page.evaluate(() => {
+        return document.activeElement && document.activeElement.id;
+      });
+    })
+    .toBe("starter-code-editor")
+  await expect(page.locator(".code-editor-shell")).toHaveClass(/is-editing/)
+  await expect
+    .poll(async () => {
+      return await page.evaluate(() => {
+        const highlight = document.getElementById("starter-code-highlight");
+        if (!highlight) {
+          return "missing";
+        }
+        return window.getComputedStyle(highlight).opacity;
+      });
+    })
+    .toBe("1")
+
+  await page.keyboard.type("a")
+  await expect(page.locator("#session-timer-status")).toHaveText(
+    "Session timer: 30:00 remaining."
+  )
+})

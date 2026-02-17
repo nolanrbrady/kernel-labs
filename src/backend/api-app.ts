@@ -4,15 +4,14 @@ import express, {
   type Request,
   type Response
 } from "express"
-import { join } from "node:path"
+import { join, dirname } from "node:path"
+import { fileURLToPath } from "node:url"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 
 import {
-  getProblemWorkspaceClientScript,
   ProblemWorkspaceScreen,
   createEditorFirstLandingRoute,
-  getProblemWorkspaceThemeCss,
   type QuestionLibraryItem,
   type WorkspaceProblem
 } from "../frontend/problem-workspace-route.js"
@@ -41,6 +40,12 @@ import {
   planSessionAssignment,
   rankSessionCandidates
 } from "../scheduler/spaced-repetition-scheduler.js"
+
+const currentDir = dirname(fileURLToPath(import.meta.url))
+const frontendStaticDir = join(currentDir, "..", "frontend")
+const staticAssetVersion =
+  process.env.STATIC_ASSET_VERSION ??
+  String(Math.floor(Date.now() / 1000))
 
 const DEFAULT_QUESTION_LIBRARY: QuestionLibraryItem[] = [
   {
@@ -141,20 +146,27 @@ const anonymousProgressStore = createFileAnonymousProgressStore({
 
 function renderHtmlDocument(
   bodyMarkup: string,
-  stylesheet: string,
-  script = ""
+  options: { includeClientScript?: boolean } = {}
 ): string {
+  const versionQuery = `?v=${encodeURIComponent(staticAssetVersion)}`
+  const clientScriptTag = options.includeClientScript
+    ? `\n    <script src="/static/problem-workspace-client.js${versionQuery}" defer></script>`
+    : ""
+
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>DeepML-SR</title>
-    <style data-theme="deepmlsr-workspace">${stylesheet}</style>
+    <script>try{var t=localStorage.getItem("deepmlsr.theme.v1");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/problem-workspace.css${versionQuery}" data-theme="deepmlsr-workspace">${clientScriptTag}
   </head>
   <body>
     ${bodyMarkup}
-    <script>${script}</script>
   </body>
 </html>`
 }
@@ -170,10 +182,16 @@ export function createApiApp(): Express {
     response.setHeader("cross-origin-resource-policy", "same-origin")
     response.setHeader(
       "content-security-policy",
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:;"
     )
     next()
   })
+
+  app.use("/static", express.static(frontendStaticDir, {
+    index: false,
+    maxAge: 0,
+    immutable: false
+  }))
 
   app.get("/", (_request: Request, response: Response) => {
     const route = createEditorFirstLandingRoute(DEFAULT_WORKSPACE_PROBLEM)
@@ -184,13 +202,7 @@ export function createApiApp(): Express {
     response
       .status(200)
       .type("html")
-      .send(
-        renderHtmlDocument(
-          markup,
-          getProblemWorkspaceThemeCss(),
-          getProblemWorkspaceClientScript()
-        )
-      )
+      .send(renderHtmlDocument(markup, { includeClientScript: true }))
   })
 
   app.get("/health", (_request: Request, response: Response) => {
@@ -200,9 +212,7 @@ export function createApiApp(): Express {
   app.get("/auth/create-account", (_request: Request, response: Response) => {
     response.status(200).type("html").send(
       renderHtmlDocument(
-        `<main><h1>Create Optional Account</h1><p>Account creation is optional and never blocks solving.</p></main>`,
-        getProblemWorkspaceThemeCss(),
-        ""
+        `<main><h1>Create Optional Account</h1><p>Account creation is optional and never blocks solving.</p></main>`
       )
     )
   })
