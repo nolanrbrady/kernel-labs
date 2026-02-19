@@ -9,6 +9,9 @@ import {
   type ProblemReviewQueueStore
 } from "../../problems/problem-review-queue.js"
 import { getSeedProblemPack } from "../../problems/seed-problem-pack.js"
+import type { ProblemSpecV2 } from "../../problems/problem-spec-v2.js"
+import { verifyProblemCard } from "../../problems/card-verification-pipeline.js"
+import { runPaperProblemGeneration } from "../../problems/paper-problem-generation.js"
 import {
   summarizeSuggestTopicValidationResult,
   validateSuggestTopicDraftAgainstProblemSpecV2
@@ -181,10 +184,89 @@ export function registerProblemRoutes(options: {
     response.status(200).json(problemReviewQueueStore.getReviewQueueSnapshot())
   })
 
+  app.post("/api/problems/verify-card", (request: Request, response: Response) => {
+    const rawBody = request.body
+    if (!rawBody || typeof rawBody !== "object" || Array.isArray(rawBody)) {
+      response.status(400).json({
+        status: "failure",
+        errorCode: "INVALID_REQUEST",
+        message: "verify-card expects a ProblemSpecV2 object payload."
+      })
+      return
+    }
+
+    try {
+      const verification = verifyProblemCard(rawBody as ProblemSpecV2)
+      response.status(200).json({
+        status: verification.status,
+        approvalType: verification.approvalType,
+        blockers: verification.blockers,
+        warnings: verification.warnings,
+        diagnostics: verification.diagnostics,
+        decisionMetadata: verification.decisionMetadata
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to verify card payload."
+      response.status(400).json({
+        status: "failure",
+        errorCode: "INVALID_CARD_PAYLOAD",
+        message
+      })
+    }
+  })
+
+  app.post("/api/problems/generate-from-paper", async (request: Request, response: Response) => {
+    const rawBody = request.body as {
+      paperLinks?: unknown
+      paperPdfs?: unknown
+      targetDescription?: unknown
+      maxIterations?: unknown
+      model?: unknown
+      temperature?: unknown
+      maxOutputTokens?: unknown
+      promptPatch?: unknown
+    }
+
+    try {
+      const generation = await runPaperProblemGeneration({
+        paperLinks: rawBody.paperLinks,
+        paperPdfs: rawBody.paperPdfs,
+        targetDescription: rawBody.targetDescription,
+        maxIterations: rawBody.maxIterations,
+        model: rawBody.model,
+        temperature: rawBody.temperature,
+        maxOutputTokens: rawBody.maxOutputTokens,
+        promptPatch: rawBody.promptPatch
+      })
+
+      response.status(200).json({
+        status: "ok",
+        generation
+      })
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to run paper generation."
+      response.status(400).json({
+        status: "failure",
+        errorCode: "PAPER_GENERATION_FAILED",
+        message
+      })
+    }
+  })
+
   app.get(
     "/api/problems/verification-status",
     (_request: Request, response: Response) => {
-      response.status(200).json(problemReviewQueueStore.getVerificationStatusSnapshot())
+      response.status(200).json({
+        statusByProblemId: problemReviewQueueStore.getVerificationStatusSnapshot(),
+        statusDetailsByProblemId:
+          problemReviewQueueStore.getVerificationStatusDetailsSnapshot()
+      })
     }
   )
 

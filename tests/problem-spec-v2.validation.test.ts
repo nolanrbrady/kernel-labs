@@ -16,7 +16,7 @@ function createValidSpec(): ProblemSpecV2 {
     learning_context:
       "You will use this exact pattern in decoder self-attention, cross-attention masking, and sparse-context transformers. Knowing why additive masks must be applied before softmax and why row normalization must hold lets you debug production attention stacks quickly, especially when sequence length or precision changes reveal hidden instability.",
     goal:
-      "Write `masked_attention_weights(q, k, mask)` that computes scaled scores `(q @ k.T) / sqrt(d_k)`, applies an additive mask where masked entries receive a strong negative bias, and returns row-wise stable softmax weights. The output must remain finite, shape-correct, and equivalent to the reference implementation on deterministic toy tensors.",
+      "Write `masked_attention_weights(q, k, mask)` that computes scaled scores `(q @ k.T) / sqrt(d_k)`, applies an additive mask where masked entries receive a strong negative bias, and returns row-wise stable softmax weights. The output must remain finite, shape-correct, and equivalent to the reference implementation on deterministic toy tensors while matching PyTorch attention semantics.",
     starter_code:
       "def masked_attention_weights(q, k, mask):\n    \"\"\"Return masked attention weights for toy tensors.\"\"\"\n    # TODO: implement\n    pass",
     function_signature: "def masked_attention_weights(q, k, mask):",
@@ -39,6 +39,20 @@ function createValidSpec(): ProblemSpecV2 {
         "all values finite",
         "rows sum to 1 within tolerance",
         "masked positions have near-zero probability"
+      ]
+    },
+    fidelity_target: {
+      paper_title: "Attention Is All You Need",
+      paper_url: "https://arxiv.org/abs/1706.03762",
+      target_component: "Scaled dot-product attention core weight computation",
+      paper_section: "Section 3.2.1 attention function definition",
+      required_semantic_checks: [
+        "Mask is applied before softmax normalization",
+        "Row-wise probability normalization is preserved for each query"
+      ],
+      forbidden_shortcuts: [
+        "Hard-coded output values copied from visible tests",
+        "Shape-only matrix return that ignores masking and normalization semantics"
       ]
     },
     pass_criteria: {
@@ -203,6 +217,11 @@ function createValidSpec(): ProblemSpecV2 {
     verification: {
       status: "verified",
       blockers: [],
+      decision_metadata: {
+        approval_type: "auto_provisional",
+        verified_at_iso: "2026-02-17T12:00:00Z",
+        pipeline_version: "card_verification_pipeline_v1"
+      },
       notes:
         "Reviewed with deterministic oracle outputs and adversarial checks for common attention implementation errors."
     }

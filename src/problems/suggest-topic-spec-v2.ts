@@ -362,7 +362,7 @@ function buildProvisionalProblemSpecV2(draft: SuggestTopicDraft): ProblemSpecV2 
     learning_objective: learningObjective,
     concept_description: context,
     learning_context: `${context} ${notesText}`.trim(),
-    goal: `${outputSpecification} ${constraintsAndEdgeCases}`.trim(),
+    goal: `${outputSpecification} ${constraintsAndEdgeCases} Implement with PyTorch-compatible tensor semantics.`.trim(),
     starter_code: starterCode,
     function_signature: starterSignature,
     inputs: {
@@ -382,6 +382,23 @@ function buildProvisionalProblemSpecV2(draft: SuggestTopicDraft): ProblemSpecV2 
       numerical_properties: [
         "all values finite",
         "deterministic for fixed toy inputs"
+      ]
+    },
+    fidelity_target: {
+      paper_title: resources[0]?.title ?? "Suggested paper/resource",
+      paper_url: resources[0]?.url ?? "https://arxiv.org/abs/1706.03762",
+      target_component: `${title || "Suggested operation"} forward-path implementation`,
+      paper_section:
+        "Map implementation to the referenced paper's described component behavior and notation.",
+      required_semantic_checks: [
+        "Matches deterministic oracle semantics on hidden toy tensor checks",
+        category === "Attention"
+          ? "Preserves masking/softmax normalization semantics in attention score computation"
+          : "Preserves declared axis and broadcasting semantics across deterministic perturbations"
+      ],
+      forbidden_shortcuts: [
+        "Shape-only output scaffolds that skip semantic computation",
+        "Hard-coded constants that bypass deterministic oracle behavior"
       ]
     },
     pass_criteria: {
@@ -460,6 +477,10 @@ function buildProvisionalProblemSpecV2(draft: SuggestTopicDraft): ProblemSpecV2 
     verification: {
       status: "needs_review",
       blockers: ["Awaiting full reviewer-authored hidden/adversarial confirmation."],
+      decision_metadata: {
+        approval_type: "auto_provisional",
+        pipeline_version: "card_verification_pipeline_v1"
+      },
       notes:
         "Provisional ProblemSpecV2 generated from Suggest Topic intake; requires full review before publish."
     }

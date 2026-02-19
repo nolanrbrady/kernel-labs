@@ -4,6 +4,7 @@ import {
 } from "../../frontend/problem-workspace-route.js"
 import { getSeedProblemPack } from "../../problems/seed-problem-pack.js"
 import { createProblemReviewQueueStore } from "../../problems/problem-review-queue.js"
+import type { VerificationApprovalType } from "../../problems/problem-spec-v2.js"
 
 export const DEFAULT_WORKSPACE_PROBLEM_ID = "attention_scaled_dot_product_v1"
 
@@ -29,6 +30,31 @@ const SEED_PROBLEM_VERSION_BY_ID = SEED_PROBLEM_PACK.reduce<Record<string, numbe
   {}
 )
 
+const INITIAL_VERIFICATION_BY_PROBLEM_ID = SEED_PROBLEM_PACK.reduce<
+  Record<
+    string,
+    {
+      status: "verified" | "needs_review" | "rejected"
+      approvalType: VerificationApprovalType | null
+      blockers: string[]
+    }
+  >
+>((accumulator, problem) => {
+  const normalizedStatus =
+    problem.verification.status === "verified" ||
+    problem.verification.status === "needs_review" ||
+    problem.verification.status === "rejected"
+      ? problem.verification.status
+      : "needs_review"
+
+  accumulator[problem.id] = {
+    status: normalizedStatus,
+    approvalType: problem.verification.decision_metadata?.approval_type ?? null,
+    blockers: [...problem.verification.blockers]
+  }
+  return accumulator
+}, {})
+
 export const problemReviewQueueStore = createProblemReviewQueueStore({
   knownProblemIds: Array.from(
     new Set([DEFAULT_WORKSPACE_PROBLEM_ID, ...SEED_PROBLEM_PACK.map((problem) => problem.id)])
@@ -36,6 +62,14 @@ export const problemReviewQueueStore = createProblemReviewQueueStore({
   problemVersionById: {
     [DEFAULT_WORKSPACE_PROBLEM_ID]: 1,
     ...SEED_PROBLEM_VERSION_BY_ID
+  },
+  initialVerificationByProblemId: {
+    [DEFAULT_WORKSPACE_PROBLEM_ID]: {
+      status: "verified",
+      approvalType: "auto_provisional",
+      blockers: []
+    },
+    ...INITIAL_VERIFICATION_BY_PROBLEM_ID
   }
 })
 

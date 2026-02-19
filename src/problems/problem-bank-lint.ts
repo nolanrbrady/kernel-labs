@@ -4,6 +4,7 @@ import {
   validateSeedProblemSpec
 } from "./seed-problem-pack.js"
 import { getReferencePythonSolution } from "./reference-python-solutions.js"
+import { verifyProblemCard } from "./card-verification-pipeline.js"
 
 export type ProblemBankLintResult = {
   ok: boolean
@@ -91,6 +92,16 @@ export function lintProblemBank(): ProblemBankLintResult {
         `${problem.id}: reference Python solution must define def ${problem.evaluation_artifacts.reference_solution_function}(...).`
       )
     }
+
+    const verification = verifyProblemCard(problem)
+    if (verification.status !== "verified") {
+      errors.push(
+        `${problem.id}: card verification pipeline status is ${verification.status}. blockers=${verification.blockers.join(
+          " | "
+        )}`
+      )
+    }
+    warnings.push(...verification.warnings.map((warning) => `${problem.id}: ${warning}`))
   })
 
   return {

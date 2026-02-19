@@ -22,6 +22,7 @@ export type VerificationOracle =
   | "metamorphic_relation"
 
 export type VerificationStatus = "draft" | "needs_review" | "verified" | "rejected"
+export type VerificationApprovalType = "auto_provisional" | "human_reviewed"
 
 export type ProblemSpecV2 = {
   id: string
@@ -51,6 +52,14 @@ export type ProblemSpecV2 = {
     shape: string
     semantics: string[]
     numerical_properties: string[]
+  }
+  fidelity_target: {
+    paper_title: string
+    paper_url: string
+    target_component: string
+    paper_section: string
+    required_semantic_checks: string[]
+    forbidden_shortcuts: string[]
   }
   pass_criteria: {
     determinism: "deterministic" | "stochastic_but_bounded"
@@ -106,6 +115,11 @@ export type ProblemSpecV2 = {
     status: VerificationStatus
     blockers: string[]
     notes: string
+    decision_metadata?: {
+      approval_type: VerificationApprovalType
+      verified_at_iso?: string
+      pipeline_version: string
+    }
   }
 }
 
@@ -265,6 +279,58 @@ export function validateProblemSpecV2(spec: ProblemSpecV2): ProblemSpecV2Validat
     errors.push(`${problemId}: output_contract.numerical_properties must include finite-value constraints.`)
   }
 
+  if (!isNonEmptyString(spec.fidelity_target.paper_title)) {
+    errors.push(`${problemId}: fidelity_target.paper_title is required.`)
+  }
+
+  if (!isNonEmptyString(spec.fidelity_target.paper_url)) {
+    errors.push(`${problemId}: fidelity_target.paper_url is required.`)
+  } else {
+    const paperUrlError = lintUrl(spec.fidelity_target.paper_url)
+    if (paperUrlError) {
+      errors.push(`${problemId}: fidelity_target.paper_url ${paperUrlError}.`)
+    }
+  }
+
+  if (!isNonEmptyString(spec.fidelity_target.target_component)) {
+    errors.push(`${problemId}: fidelity_target.target_component is required.`)
+  }
+
+  if (!isNonEmptyString(spec.fidelity_target.paper_section)) {
+    errors.push(`${problemId}: fidelity_target.paper_section is required.`)
+  }
+
+  if (spec.fidelity_target.required_semantic_checks.length < 2) {
+    errors.push(`${problemId}: fidelity_target.required_semantic_checks must include at least 2 entries.`)
+  }
+
+  if (spec.fidelity_target.forbidden_shortcuts.length < 2) {
+    errors.push(`${problemId}: fidelity_target.forbidden_shortcuts must include at least 2 entries.`)
+  }
+
+  const attentionGoalRequiresMaskingOrSoftmax =
+    spec.category === "Attention" &&
+    /mask|softmax|normaliz/i.test(`${spec.goal} ${spec.concept_description}`)
+  if (attentionGoalRequiresMaskingOrSoftmax) {
+    const hasMaskingOrSoftmaxCheck = spec.fidelity_target.required_semantic_checks.some((entry) => {
+      const normalized = entry.toLowerCase()
+      return (
+        normalized.includes("mask") ||
+        normalized.includes("softmax") ||
+        normalized.includes("normaliz")
+      )
+    })
+    if (!hasMaskingOrSoftmaxCheck) {
+      errors.push(
+        `${problemId}: attention cards with masking/softmax semantics must include matching fidelity_target.required_semantic_checks coverage.`
+      )
+    }
+  }
+
+  if (!/torch|pytorch/i.test(`${spec.goal} ${spec.starter_code}`)) {
+    errors.push(`${problemId}: goal or starter_code must explicitly anchor implementation to PyTorch semantics.`)
+  }
+
   if (spec.pass_criteria.checks.length < 4) {
     errors.push(`${problemId}: pass_criteria.checks must include at least 4 checks.`)
   }
@@ -385,8 +451,8 @@ export function validateProblemSpecV2(spec: ProblemSpecV2): ProblemSpecV2Validat
     errors.push(`${problemId}: common_pitfalls must include at least 3 items.`)
   }
 
-  if (spec.estimated_time_minutes < 10 || spec.estimated_time_minutes > 30) {
-    errors.push(`${problemId}: estimated_time_minutes must be between 10 and 30.`)
+  if (spec.estimated_time_minutes < 15 || spec.estimated_time_minutes > 30) {
+    errors.push(`${problemId}: estimated_time_minutes must be between 15 and 30.`)
   }
 
   if (!isNonEmptyString(spec.authoring.human_reviewer)) {
@@ -433,6 +499,22 @@ export function validateProblemSpecV2(spec: ProblemSpecV2): ProblemSpecV2Validat
     }
     if (spec.verification.blockers.length > 0) {
       errors.push(`${problemId}: verified cards cannot contain blockers.`)
+    }
+    if (!spec.verification.decision_metadata) {
+      errors.push(`${problemId}: verified cards must include verification.decision_metadata.`)
+    }
+    if (
+      spec.verification.decision_metadata &&
+      !isNonEmptyString(spec.verification.decision_metadata.pipeline_version)
+    ) {
+      errors.push(`${problemId}: verification.decision_metadata.pipeline_version is required.`)
+    }
+    if (spec.verification.decision_metadata?.verified_at_iso) {
+      if (!ISO_8601_UTC_PATTERN.test(spec.verification.decision_metadata.verified_at_iso)) {
+        errors.push(
+          `${problemId}: verification.decision_metadata.verified_at_iso must be UTC ISO format YYYY-MM-DDTHH:MM:SSZ.`
+        )
+      }
     }
   } else if (scoreAverage >= 4.2) {
     warnings.push(

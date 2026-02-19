@@ -98,3 +98,38 @@ test("session-problem rate limiting blocks excessive flag spam", () => {
   assert.equal(fourth.accepted, false)
   assert.equal(fourth.rateLimited, true)
 })
+
+test("initial non-verified statuses are unschedulable by default", () => {
+  const store = createProblemReviewQueueStore({
+    knownProblemIds: ["card_verified", "card_needs_review", "card_rejected"],
+    initialVerificationByProblemId: {
+      card_verified: {
+        status: "verified",
+        approvalType: "auto_provisional",
+        blockers: []
+      },
+      card_needs_review: {
+        status: "needs_review",
+        approvalType: null,
+        blockers: ["SCHEMA_INVALID: missing hidden tests"]
+      },
+      card_rejected: {
+        status: "rejected",
+        approvalType: null,
+        blockers: ["REFERENCE_RUNTIME_FAILURE: oracle crashed"]
+      }
+    }
+  })
+
+  assert.equal(store.isProblemSchedulable("card_verified"), true)
+  assert.equal(store.isProblemSchedulable("card_needs_review"), false)
+  assert.equal(store.isProblemSchedulable("card_rejected"), false)
+  assert.deepEqual(
+    store.filterSchedulableProblemIds([
+      "card_verified",
+      "card_needs_review",
+      "card_rejected"
+    ]),
+    ["card_verified"]
+  )
+})

@@ -1,4 +1,5 @@
 import type { ResurfacedCandidate } from "../scheduler/spaced-repetition-scheduler.js"
+import type { VerificationApprovalType } from "./problem-spec-v2.js"
 
 export const PROBLEM_FLAG_REASONS = [
   "incorrect_output",
@@ -11,6 +12,11 @@ export const PROBLEM_FLAG_REASONS = [
 export type ProblemFlagReason = (typeof PROBLEM_FLAG_REASONS)[number]
 
 export type ProblemVerificationStatus = "verified" | "needs_review" | "rejected"
+export type ProblemVerificationRecord = {
+  status: ProblemVerificationStatus
+  approvalType: VerificationApprovalType | null
+  blockers: string[]
+}
 
 export type ProblemFlagRecord = {
   flagId: string
@@ -53,11 +59,13 @@ export type ProblemReviewQueueSnapshot = {
   items: ProblemFlagRecord[]
   totalFlags: number
   statusByProblemId: Record<string, ProblemVerificationStatus>
+  statusDetailsByProblemId: Record<string, ProblemVerificationRecord>
 }
 
 type ProblemReviewQueueOptions = {
   knownProblemIds: string[]
   problemVersionById?: Record<string, number>
+  initialVerificationByProblemId?: Record<string, ProblemVerificationRecord>
   nowProvider?: () => number
 }
 
@@ -121,7 +129,9 @@ function isKnownReason(value: unknown): value is ProblemFlagReason {
 export type ProblemReviewQueueStore = {
   submitFlag: (input: SubmitProblemFlagInput) => SubmitProblemFlagResult
   getVerificationStatus: (problemId: string) => ProblemVerificationStatus
+  getVerificationStatusDetails: (problemId: string) => ProblemVerificationRecord
   getVerificationStatusSnapshot: () => Record<string, ProblemVerificationStatus>
+  getVerificationStatusDetailsSnapshot: () => Record<string, ProblemVerificationRecord>
   getReviewQueueSnapshot: () => ProblemReviewQueueSnapshot
   isProblemSchedulable: (problemId: string) => boolean
   filterSchedulableProblemIds: (problemIds: string[]) => string[]
@@ -138,9 +148,14 @@ export function createProblemReviewQueueStore(
   const knownProblemIdSet = new Set(knownProblemIds)
   const problemVersionById = options.problemVersionById ?? {}
 
-  const statusByProblemId = new Map<string, ProblemVerificationStatus>()
+  const verificationByProblemId = new Map<string, ProblemVerificationRecord>()
   knownProblemIds.forEach((problemId) => {
-    statusByProblemId.set(problemId, "verified")
+    const initialVerification = options.initialVerificationByProblemId?.[problemId]
+    verificationByProblemId.set(problemId, {
+      status: initialVerification?.status ?? "verified",
+      approvalType: initialVerification?.approvalType ?? null,
+      blockers: initialVerification?.blockers ?? []
+    })
   })
 
   const flagsByProblemId = new Map<string, ProblemFlagRecord[]>()
@@ -149,7 +164,24 @@ export function createProblemReviewQueueStore(
   let nextFlagId = 1
 
   function getVerificationStatus(problemId: string): ProblemVerificationStatus {
-    return statusByProblemId.get(problemId) ?? "verified"
+    return verificationByProblemId.get(problemId)?.status ?? "verified"
+  }
+
+  function getVerificationStatusDetails(problemId: string): ProblemVerificationRecord {
+    const existing = verificationByProblemId.get(problemId)
+    if (existing) {
+      return {
+        status: existing.status,
+        approvalType: existing.approvalType,
+        blockers: [...existing.blockers]
+      }
+    }
+
+    return {
+      status: "verified",
+      approvalType: null,
+      blockers: []
+    }
   }
 
   function getReviewQueueSnapshot(): ProblemReviewQueueSnapshot {
@@ -160,22 +192,37 @@ export function createProblemReviewQueueStore(
     return {
       items: orderedItems,
       totalFlags: orderedItems.length,
-      statusByProblemId: getVerificationStatusSnapshot()
+      statusByProblemId: getVerificationStatusSnapshot(),
+      statusDetailsByProblemId: getVerificationStatusDetailsSnapshot()
     }
   }
 
   function getVerificationStatusSnapshot(): Record<string, ProblemVerificationStatus> {
     const snapshot: Record<string, ProblemVerificationStatus> = {}
 
-    statusByProblemId.forEach((status, problemId) => {
-      snapshot[problemId] = status
+    verificationByProblemId.forEach((details, problemId) => {
+      snapshot[problemId] = details.status
+    })
+
+    return snapshot
+  }
+
+  function getVerificationStatusDetailsSnapshot(): Record<string, ProblemVerificationRecord> {
+    const snapshot: Record<string, ProblemVerificationRecord> = {}
+
+    verificationByProblemId.forEach((details, problemId) => {
+      snapshot[problemId] = {
+        status: details.status,
+        approvalType: details.approvalType,
+        blockers: [...details.blockers]
+      }
     })
 
     return snapshot
   }
 
   function isProblemSchedulable(problemId: string): boolean {
-    if (!knownProblemIdSet.has(problemId) && !statusByProblemId.has(problemId)) {
+    if (!knownProblemIdSet.has(problemId) && !verificationByProblemId.has(problemId)) {
       return true
     }
 
@@ -316,9 +363,23 @@ export function createProblemReviewQueueStore(
         : "queued_for_review"
 
     if (shouldEscalateToNeedsReview) {
-      statusByProblemId.set(problemId, "needs_review")
-    } else if (!statusByProblemId.has(problemId)) {
-      statusByProblemId.set(problemId, priorStatus)
+      const current = getVerificationStatusDetails(problemId)
+      verificationByProblemId.set(problemId, {
+        status: "needs_review",
+        approvalType: current.approvalType,
+        blockers: Array.from(
+          new Set([
+            ...current.blockers,
+            "FLAGGED_FOR_REVIEW: learner flagged this card for correctness/clarity triage."
+          ])
+        )
+      })
+    } else if (!verificationByProblemId.has(problemId)) {
+      verificationByProblemId.set(problemId, {
+        status: priorStatus,
+        approvalType: null,
+        blockers: []
+      })
     }
 
     const evaluationCorrectness = input.evaluationCorrectness
@@ -369,7 +430,9 @@ export function createProblemReviewQueueStore(
   return {
     submitFlag,
     getVerificationStatus,
+    getVerificationStatusDetails,
     getVerificationStatusSnapshot,
+    getVerificationStatusDetailsSnapshot,
     getReviewQueueSnapshot,
     isProblemSchedulable,
     filterSchedulableProblemIds,

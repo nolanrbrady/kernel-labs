@@ -1762,6 +1762,42 @@ function buildKnownFailurePatterns(problem: SeedProblemDraft): string[] {
   return uniquePatterns.slice(0, 8)
 }
 
+function buildFidelityTarget(problem: SeedProblemDraft): ProblemSpecV2["fidelity_target"] {
+  const primaryResource = problem.resources[0] ?? {
+    title: "Attention Is All You Need",
+    url: "https://arxiv.org/abs/1706.03762"
+  }
+
+  const normalizedCategory = problem.category.toLowerCase()
+  const requiresMaskingOrSoftmax = /mask|softmax|normaliz/i.test(
+    `${problem.title} ${problem.goal} ${problem.concept_description}`
+  )
+  const semanticChecks = Array.from(
+    new Set([
+      "Matches deterministic oracle output on hidden toy tensor cases",
+      "Preserves declared output-contract numerical semantics",
+      normalizedCategory.includes("attention") && requiresMaskingOrSoftmax
+        ? "Applies masking/softmax normalization semantics before value mixing"
+        : normalizedCategory.includes("attention")
+          ? "Maintains attention-axis semantics and tensor partition behavior under deterministic perturbations"
+          : "Maintains axis and broadcasting semantics across deterministic perturbations"
+    ])
+  )
+
+  return {
+    paper_title: primaryResource.title,
+    paper_url: primaryResource.url,
+    target_component: `${problem.title} forward-path primitive`,
+    paper_section:
+      "Implementation target anchored to the cited paper component definition and notation.",
+    required_semantic_checks: semanticChecks,
+    forbidden_shortcuts: [
+      "Shape-only output stubs that ignore operation semantics",
+      "Bypassing deterministic oracle behavior with hard-coded constants"
+    ]
+  }
+}
+
 function buildProblemSpec(problem: SeedProblemDraft): ProblemSpecV2 {
   const fixture = getRuntimeProblemFixture(problem.id)
   if (!fixture) {
@@ -1792,7 +1828,7 @@ function buildProblemSpec(problem: SeedProblemDraft): ProblemSpecV2 {
     "Connect this operation to real architectures and explain why precise forward semantics are foundational before scaling to larger model components."
   )
   const goal = ensureMinLength(
-    problem.goal,
+    `${problem.goal} Implement the function with PyTorch-compatible tensor semantics (solution may use NumPy in this toy runtime as long as semantics match torch behavior).`,
     140,
     "Require deterministic oracle-level correctness on toy tensors, enforce finite outputs, and prevent shape-only shortcuts by checking deeper semantic behavior."
   )
@@ -1841,6 +1877,7 @@ function buildProblemSpec(problem: SeedProblemDraft): ProblemSpecV2 {
         new Set([...problem.expected_output.numerical_properties, "all values finite"])
       )
     },
+    fidelity_target: buildFidelityTarget(problem),
     pass_criteria: {
       determinism: "deterministic",
       checks: [
@@ -1919,6 +1956,11 @@ function buildProblemSpec(problem: SeedProblemDraft): ProblemSpecV2 {
     verification: {
       status: "verified",
       blockers: [],
+      decision_metadata: {
+        approval_type: "auto_provisional",
+        verified_at_iso: REVIEWED_AT_ISO,
+        pipeline_version: "card_verification_pipeline_v1"
+      },
       notes:
         "Migrated to ProblemSpecV2 with deterministic oracle checks, hidden/adversarial coverage, and strict pass criteria."
     }
